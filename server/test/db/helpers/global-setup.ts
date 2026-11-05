@@ -11,13 +11,12 @@
 // run crashed mid-migration. The option name is `count` in the runner API;
 // Infinity means "all migrations in this direction".
 //
-// Why not use dotenv: the project loads .env with Node's --env-file-if-exists
-// flag in all scripts that need it (D-023). This file is run by Vitest's
-// globalSetup which does not pass that flag, so the caller script must set
-// TEST_DATABASE_URL before starting Vitest (the test:db script does this via
-// the npm script that passes --env-file-if-exists to node before vitest).
-// For simplicity the test:db script passes the env file via vitest's own
-// --environment flag — actually we use the node flag via the script wrapper.
+// Why not use dotenv: TEST_DATABASE_URL reaches this file through Node's
+// --env-file-if-exists flag. The test:db script invokes Vitest via
+// `node --env-file-if-exists=.env node_modules/vitest/vitest.mjs`, so Node
+// loads .env into the process environment before Vitest starts. This file
+// runs as Vitest's globalSetup and reads TEST_DATABASE_URL directly from
+// process.env — no library needed.
 //
 // Note: node-pg-migrate's runner is imported from its bundle entry point.
 // The `runner` function is the same one the CLI uses internally.

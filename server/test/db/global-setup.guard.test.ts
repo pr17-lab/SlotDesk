@@ -57,8 +57,8 @@ describe('global-setup guard', () => {
     // Count tables on the dev database before.
     const tablesBefore = await countTables(devUrl);
 
-    // Override TEST_DATABASE_URL with a non-_test URL (the dev database or a
-    // fake URL). The global setup must throw before touching any schema.
+    // Override TEST_DATABASE_URL with the dev database URL, which does not end
+    // in _test. The global setup must throw before touching any schema.
     const originalUrl = process.env['TEST_DATABASE_URL'];
     // Use the dev database URL (always defined: the guard above throws if missing)
     // so the "no tables dropped" assertion is meaningful.
