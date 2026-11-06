@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel an in-progress run for the same ref when a newer one starts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server
+
+jobs:
+  checks:
+    # Pin to a specific Ubuntu release so the runner environment does not
+    # change unexpectedly when GitHub rotates the default runner alias.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Throwaway container credentials — not a secret.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: slotdesk_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d slotdesk_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Fail if any file is stored with CRLF
+        # working-directory is the repository root because git ls-files only
+        # lists files at or below the current folder.
+        working-directory: .
+        run: |
+          if git ls-files --eol | grep -E '^i/crlf'; then
+            echo "The files listed above are stored with CRLF line endings."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: server/.nvmrc
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      - run: npm run build
+
+      - run: npm test
+
+      - name: Create the development database
+        run: docker exec ${{ job.services.postgres.id }} createdb -U postgres slotdesk
+
+      - name: Record versions
+        run: |
+          node -v
+          npm -v
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -c "select version()"
+          docker exec ${{ job.services.postgres.id }} psql -U postgres -c "show max_connections"
+
+      - name: Apply migrations to the development database
+        run: npm run migrate:up
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk
+
+      - name: Database tests
+        # Two databases are needed: slotdesk_test for the test suite (migrations
+        # are wiped and reapplied on each run) and slotdesk so the guard test
+        # can prove no table in the development database was dropped.
+        run: npm run test:db
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk_test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk
+
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: server/.nvmrc
+
+      - name: Audit production dependencies (any severity)
+        run: npm audit --omit=dev
+
+      - name: Audit all dependencies (high or critical)
+        # Run even when the previous audit step fails so both reports are
+        # always visible in the same run.
+        if: ${{ !cancelled() }}
+        run: npm audit --audit-level=high
