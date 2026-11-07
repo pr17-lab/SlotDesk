@@ -6,6 +6,8 @@ export interface Config {
   port: number;
   nodeEnv: NodeEnv;
   databaseUrl: string;
+  authSecret: string;
+  authUrl: string;
 }
 
 // Kept as a standalone exported function so existing unit tests can import and
@@ -43,7 +45,21 @@ export const databaseUrlSchema = z
     { message: 'DATABASE_URL must use the postgres: or postgresql: scheme' },
   );
 
-// Zod schema for all three environment variables (D-022). The PORT field calls
+// Zod schema for BETTER_AUTH_SECRET (D-029). Messages name the variable but
+// never include its value, so a secret never ends up in a log or error.
+export const authSecretSchema = z
+  .string({ message: 'BETTER_AUTH_SECRET is required' })
+  .min(32, { message: 'BETTER_AUTH_SECRET must be at least 32 characters' });
+
+// Zod schema for BETTER_AUTH_URL (D-029): the public base URL of the app.
+export const authUrlSchema = z
+  .string({ message: 'BETTER_AUTH_URL is required' })
+  .url({ message: 'BETTER_AUTH_URL must be a valid URL' })
+  .refine((val) => val.startsWith('http://') || val.startsWith('https://'), {
+    message: 'BETTER_AUTH_URL must use the http: or https: scheme',
+  });
+
+// Zod schema for all environment variables (D-022, D-029). The PORT field calls
 // parsePort so both the schema and the standalone function stay in sync.
 const envSchema = z.object({
   PORT: z
@@ -54,6 +70,8 @@ const envSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
   DATABASE_URL: databaseUrlSchema,
+  BETTER_AUTH_SECRET: authSecretSchema,
+  BETTER_AUTH_URL: authUrlSchema,
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -69,4 +87,6 @@ export const config: Config = {
   port: parsed.data.PORT,
   nodeEnv: parsed.data.NODE_ENV as NodeEnv,
   databaseUrl: parsed.data.DATABASE_URL,
+  authSecret: parsed.data.BETTER_AUTH_SECRET,
+  authUrl: parsed.data.BETTER_AUTH_URL,
 };

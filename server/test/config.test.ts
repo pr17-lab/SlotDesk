@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parsePort, databaseUrlSchema } from '../src/config.js';
+import {
+  parsePort,
+  databaseUrlSchema,
+  authSecretSchema,
+  authUrlSchema,
+} from '../src/config.js';
 
 describe('parsePort', () => {
   it('returns 3000 for undefined', () => {
@@ -93,5 +98,65 @@ describe('databaseUrlSchema (DATABASE_URL validation)', () => {
   it('rejects undefined', () => {
     const result = databaseUrlSchema.safeParse(undefined);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('authSecretSchema (BETTER_AUTH_SECRET validation)', () => {
+  it('rejects a missing secret (undefined)', () => {
+    const result = authSecretSchema.safeParse(undefined);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(/BETTER_AUTH_SECRET/);
+    }
+  });
+
+  it('rejects a secret shorter than 32 characters without printing it', () => {
+    const shortSecret = 'short-test-secret-31-characters';
+    expect(shortSecret).toHaveLength(31);
+    const result = authSecretSchema.safeParse(shortSecret);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const message = result.error.issues[0].message;
+      expect(message).toMatch(/BETTER_AUTH_SECRET/);
+      expect(message).not.toContain(shortSecret);
+    }
+  });
+
+  it('accepts a secret of exactly 32 characters', () => {
+    const result = authSecretSchema.safeParse('a'.repeat(32));
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('authUrlSchema (BETTER_AUTH_URL validation)', () => {
+  it('rejects a missing URL (undefined)', () => {
+    const result = authUrlSchema.safeParse(undefined);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(/BETTER_AUTH_URL/);
+    }
+  });
+
+  it('rejects a plain string (not a URL)', () => {
+    const result = authUrlSchema.safeParse('not-a-url');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an ftp:// URL (wrong scheme)', () => {
+    const result = authUrlSchema.safeParse('ftp://localhost:3000');
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(/http/);
+    }
+  });
+
+  it('accepts an http:// URL', () => {
+    const result = authUrlSchema.safeParse('http://localhost:3000');
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an https:// URL', () => {
+    const result = authUrlSchema.safeParse('https://slotdesk.example.com');
+    expect(result.success).toBe(true);
   });
 });
