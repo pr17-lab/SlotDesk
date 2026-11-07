@@ -9,6 +9,10 @@ export default defineConfig({
     env: {
       DATABASE_URL: 'postgresql://test:test@db.invalid:5432/slotdesk_test',
       NODE_ENV: 'test',
+      // Test-only values so config.ts loads without a .env file (as in CI).
+      // Not a real secret: exactly 32 characters, the minimum allowed.
+      BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
+      BETTER_AUTH_URL: 'http://localhost:3000',
     },
     // Exclude database integration tests from the default unit-test run.
     // Those tests need Docker running and are run separately with `npm run test:db`.
