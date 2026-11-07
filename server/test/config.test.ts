@@ -4,6 +4,7 @@ import {
   databaseUrlSchema,
   authSecretSchema,
   authUrlSchema,
+  envSchema,
 } from '../src/config.js';
 
 describe('parsePort', () => {
@@ -157,6 +158,44 @@ describe('authUrlSchema (BETTER_AUTH_URL validation)', () => {
 
   it('accepts an https:// URL', () => {
     const result = authUrlSchema.safeParse('https://slotdesk.example.com');
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('envSchema (BETTER_AUTH_URL must be https in production)', () => {
+  // Test-only values; none of them is a real secret or database.
+  const baseEnv = {
+    DATABASE_URL: 'postgresql://test:test@db.invalid:5432/slotdesk_test',
+    BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
+  };
+
+  it('rejects an http:// URL in production', () => {
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'production',
+      BETTER_AUTH_URL: 'http://slotdesk.example.com',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(/BETTER_AUTH_URL/);
+    }
+  });
+
+  it('accepts an https:// URL in production', () => {
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'production',
+      BETTER_AUTH_URL: 'https://slotdesk.example.com',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an http:// URL in development', () => {
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'development',
+      BETTER_AUTH_URL: 'http://localhost:3000',
+    });
     expect(result.success).toBe(true);
   });
 });
