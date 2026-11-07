@@ -61,18 +61,35 @@ export const authUrlSchema = z
 
 // Zod schema for all environment variables (D-022, D-029). The PORT field calls
 // parsePort so both the schema and the standalone function stay in sync.
-const envSchema = z.object({
-  PORT: z
-    .string()
-    .optional()
-    .transform((val) => parsePort(val)),
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
-  DATABASE_URL: databaseUrlSchema,
-  BETTER_AUTH_SECRET: authSecretSchema,
-  BETTER_AUTH_URL: authUrlSchema,
-});
+// Exported so tests can check the production URL rule without changing
+// process.env.
+export const envSchema = z
+  .object({
+    PORT: z
+      .string()
+      .optional()
+      .transform((val) => parsePort(val)),
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
+    DATABASE_URL: databaseUrlSchema,
+    BETTER_AUTH_SECRET: authSecretSchema,
+    BETTER_AUTH_URL: authUrlSchema,
+  })
+  // Session cookies must only travel over HTTPS in production; http:// stays
+  // allowed in development and test for localhost.
+  .superRefine((env, ctx) => {
+    if (
+      env.NODE_ENV === 'production' &&
+      !env.BETTER_AUTH_URL.startsWith('https://')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BETTER_AUTH_URL'],
+        message: 'BETTER_AUTH_URL must use https:// in production',
+      });
+    }
+  });
 
 const parsed = envSchema.safeParse(process.env);
 
