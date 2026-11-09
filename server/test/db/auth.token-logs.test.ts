@@ -192,6 +192,11 @@ it('never logs the session token when the database fails underneath get-session 
       signOutStatus: signOutRes.status,
     };
     expect(getSessionRes.status).not.toBe(200);
+    // Documents Better Auth's fail-open sign-out: sign-out.mjs catches
+    // database errors, clears the cookie and returns success while the
+    // session row survives. Accepted under D-029 risk A. If this fails, the
+    // library changed; report it.
+    expect(signOutRes.status).toBe(200);
     expect(getSessionRes.text.includes(rawToken)).toBe(false);
     expect(signOutRes.text.includes(rawToken)).toBe(false);
 
@@ -203,6 +208,14 @@ it('never logs the session token when the database fails underneath get-session 
     const scenario1BetterAuthLines = scenario1Texts.filter((text) =>
       text.includes('[Better Auth]'),
     ).length;
+
+    // The column is back, and the same cookie still works: the session
+    // survived the sign-out that reported success.
+    const afterScenario1 = await request(app)
+      .get('/api/auth/get-session')
+      .set('Cookie', cookie!);
+    expect(afterScenario1.status).toBe(200);
+    expect(afterScenario1.body?.user?.email).toBe(email);
 
     // Scenario 2: connection failure. End the app's own pool, then make
     // the same two requests against it.
@@ -222,8 +235,23 @@ it('never logs the session token when the database fails underneath get-session 
       signOutStatus: signOutRes2.status,
     };
     expect(getSessionRes2.status).not.toBe(200);
+    // Same fail-open sign-out as scenario 1 (D-029 risk A).
+    expect(signOutRes2.status).toBe(200);
     expect(getSessionRes2.text.includes(rawToken)).toBe(false);
     expect(signOutRes2.text.includes(rawToken)).toBe(false);
+
+    // Checked with the separate client, since the app's pool is ended.
+    // Found by the user, not by the token.
+    // Sign-up signs the user in automatically, so the user has more than one session.
+    const sessionsAfterScenario2 = await client.query<{ token: string }>(
+      `SELECT s.token FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE u.email = $1`,
+      [email],
+    );
+    const scenario2Matches = sessionsAfterScenario2.rows.filter(
+      (row) => row.token === rawToken,
+    ).length;
+    expect(scenario2Matches === 1).toBe(true);
 
     const scenario2Texts = captured.slice(scenario2Start);
     const scenario2TokenHits = scenario2Texts.filter((text) =>

@@ -46,16 +46,15 @@ import { fileURLToPath } from 'url';
 // Type-only: auth.options is typed as the literal object passed to
 // betterAuth() in src/auth.ts, which omits plugins/secondaryStorage/cookie
 // cache entirely (absent, not merely undefined), so TypeScript rejects
-// reading them off it directly. BetterAuthOptions (confirmed present in
-// node_modules/@better-auth/core/dist/types/init-options.d.mts, a
-// dependency of the installed better-auth package) is the full options
-// shape and lets this test check that those fields are genuinely absent.
-import type { BetterAuthOptions } from '@better-auth/core';
+// reading them off it directly. BetterAuthOptions (exported as a type by
+// the installed better-auth package) is the full options shape and lets
+// this test check that those fields are genuinely absent.
+import type { BetterAuthOptions } from 'better-auth';
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
-  cookieAttributeNames,
+  cookieAttributes,
   cookieName,
   countIdentityTables,
   findSessionCookie,
@@ -78,27 +77,9 @@ const EVIL_ORIGIN = 'https://evil.example';
 // Never printed by this file.
 const PASSWORD = 'checklist-pw-15chars';
 
-// Better Auth auto-disables origin/CSRF checking whenever it detects a test
-// runner: `skipOriginCheck` defaults to `isTest() ? true : false` unless
-// auth.ts sets `advanced.disableOriginCheck` explicitly, which it does not
-// (node_modules/@better-auth/core/dist/context/create-context.mjs:211).
-// `isTest()` is `NODE_ENV === "test" || toBoolean(process.env.TEST)`
-// (node_modules/@better-auth/core/dist/env/env-impl.mjs:36). Vitest sets
-// NODE_ENV=test AND process.env.TEST=true by default, which would make
-// checklist item 5 (a cross-origin request is rejected) silently pass
-// through instead of being rejected -- not because production is insecure
-// (isTest() is false there), but because this test-mode bypass is baked
-// into the library. Checklist item 5 is about production behaviour, so
-// this file loads its app instance with both overridden: NODE_ENV to
-// "development" (also satisfies src/config.ts's schema, whose https-only
-// rule only applies to "production") and TEST deleted. This changes
-// nothing in src/, the migrations, the Vitest configs or package.json --
-// only this file's own process.env, before the app is imported. Each
-// Vitest-isolated test file runs in its own worker process, so this does
-// not leak into other files.
-process.env.NODE_ENV = 'development';
-delete process.env.TEST;
-
+// The origin check is on in these tests, under Vitest's normal test mode,
+// because src/auth.ts sets advanced.disableOriginCheck to false (D-029).
+// Without that, Better Auth would skip the check whenever it detects a test.
 const { app, pool, auth } = await loadAppOnTestDatabase();
 const { createClient } = requireTestDatabase();
 
@@ -220,12 +201,16 @@ it('documents plain-text session token storage (D-029 accepted risk A)', async (
   const cookieToken = tokenFromSessionCookie(cookie!);
   expect(cookieToken.length).toBe(32);
 
-  const row = await client.query<{ token: string }>(
-    'SELECT token FROM sessions WHERE token = $1',
-    [cookieToken],
+  // Found by the user, not by the token, so the comparison below is a real
+  // check that the stored value equals the cookie's token.
+  // Sign-up signs the user in automatically, so the user has more than one session.
+  const rows = await client.query<{ token: string }>(
+    `SELECT s.token FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE u.email = $1`,
+    [email],
   );
-  expect(row.rowCount).toBe(1);
-  expect(cookieToken === row.rows[0]!.token).toBe(true);
+  const matches = rows.rows.filter((row) => row.token === cookieToken).length;
+  expect(matches === 1).toBe(true);
 });
 
 // --- Item 4 (http part): cookie attributes ---
@@ -246,11 +231,18 @@ it('sets exactly one HttpOnly, SameSite=Lax, Path=/ session cookie without Secur
   expect(setCookie.length).toBe(1);
   const entry = setCookie[0]!;
   expect(cookieName(entry)).toBe('better-auth.session_token');
-  const attrs = cookieAttributeNames(entry);
-  expect(attrs.includes('httponly')).toBe(true);
-  expect(attrs.includes('secure')).toBe(false);
-  expect(attrs.includes('path')).toBe(true);
-  expect(entry.toLowerCase().includes('samesite=lax')).toBe(true);
+  // cookieAttributes never includes the cookie's value, so a failure message
+  // here cannot print the token.
+  const attrs = cookieAttributes(entry);
+  const names = attrs.map((attr) => attr.split('=')[0]!);
+  // Allowlist: any other attribute (secure, domain, partitioned, or one a
+  // future library version adds) must fail this test and be reviewed.
+  const allowed = ['httponly', 'path', 'samesite', 'max-age', 'expires'];
+  expect(names.filter((name) => !allowed.includes(name))).toEqual([]);
+  expect(names).toEqual(
+    expect.arrayContaining(['httponly', 'path', 'samesite']),
+  );
+  expect(attrs).toEqual(expect.arrayContaining(['path=/', 'samesite=lax']));
   expect(
     setCookie.some((c) => cookieName(c) === 'better-auth.session_data'),
   ).toBe(false);
@@ -282,6 +274,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
   // cross-origin check has failed and D-029 must be re-evaluated before
   // adopting the library.
   expect(evilUpdate.status >= 400 && evilUpdate.status < 500).toBe(true);
+  expect(evilUpdate.body.code).toBe('INVALID_ORIGIN');
   const nameAfterEvil = await client.query<{ name: string }>(
     'SELECT name FROM users WHERE email = $1',
     [email],
@@ -294,6 +287,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
     .set('Origin', EVIL_ORIGIN)
     .set('Cookie', cookie!);
   expect(evilSignOut.status >= 400 && evilSignOut.status < 500).toBe(true);
+  expect(evilSignOut.body.code).toBe('INVALID_ORIGIN');
   const sessionStillThere = await client.query(
     'SELECT 1 FROM sessions WHERE token = $1',
     [token],
@@ -433,6 +427,7 @@ it('auth.options show no plugins, the password-length policy, no reset email hoo
   expect(options.emailAndPassword?.sendResetPassword).toBeUndefined();
   expect(options.secondaryStorage).toBeUndefined();
   expect(options.session?.cookieCache?.enabled).not.toBe(true);
+  expect(options.advanced?.disableOriginCheck).toBe(false);
 });
 
 // --- Password rules (sign-up) ---

@@ -77,14 +77,15 @@ export function cookieName(setCookieEntry: string): string {
   return setCookieEntry.slice(0, setCookieEntry.indexOf('='));
 }
 
-// The attribute names on one Set-Cookie entry, lower-cased, never the
-// cookie's value.
-export function cookieAttributeNames(setCookieEntry: string): string[] {
+// The attributes on one Set-Cookie entry, each trimmed and lower-cased as
+// "name" or "name=value" (for example "path=/", "httponly"). slice(1) drops
+// the cookie's own name=value part, so the token is never returned.
+export function cookieAttributes(setCookieEntry: string): string[] {
   return setCookieEntry
     .split(';')
     .slice(1)
-    .map((part) => part.trim().split('=')[0]!.toLowerCase())
-    .filter((name) => name.length > 0);
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => part.length > 0);
 }
 
 // Row count for one identity table. The table name is always one of our own
