@@ -71,12 +71,13 @@ export async function connectAndVerify(client: pg.Client): Promise<void> {
 
 // Truncate tenant tables after each test file so the next file starts clean.
 // Restart identity sequences so IDs are predictable within a file.
-// Order: bookings first (references resources), then resources (references
-// organizations), then organizations. The Better Auth identity tables are
-// cleaned after the tenant tables.
+// Order: memberships first (references organizations and users), then
+// bookings (references resources), then resources (references organizations),
+// then organizations. The Better Auth identity tables are cleaned after the
+// tenant tables.
 export async function truncateTables(client: pg.Client): Promise<void> {
   await client.query(
-    'TRUNCATE bookings, resources, organizations RESTART IDENTITY CASCADE',
+    'TRUNCATE memberships, bookings, resources, organizations RESTART IDENTITY CASCADE',
   );
   await client.query(
     'TRUNCATE verifications, accounts, sessions, users RESTART IDENTITY CASCADE',
