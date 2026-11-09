@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 import type { Request, Response, NextFunction } from 'express';
+import type { z } from 'zod';
 import { logger } from '../logger.js';
 
 // A typed shape for Express body-parser client errors (bad JSON, oversized body).
@@ -22,6 +23,18 @@ function isClientError(err: unknown): err is ClientError {
 export const notFoundHandler = (_req: Request, res: Response): void => {
   res.status(404).json({ error: 'Not found' });
 };
+
+// 400 for a request that failed Zod validation (D-030 error shape). Only the
+// path and message of each issue are sent, never the rejected input.
+export function sendValidationError(res: Response, error: z.ZodError): void {
+  res.status(400).json({
+    error: 'Bad Request',
+    details: error.issues.map((issue) => ({
+      path: issue.path.map(String).join('.'),
+      message: issue.message,
+    })),
+  });
+}
 
 export const errorHandler = (
   err: unknown,
