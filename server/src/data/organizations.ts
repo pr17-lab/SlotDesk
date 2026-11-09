@@ -12,7 +12,14 @@ export async function createOrganizationWithOwner(
   name: string,
 ): Promise<OrgWithRole> {
   const client = await pool.connect();
-  let rollbackFailed = false;
+  let discardClient = false;
+  // A checked-out client has no 'error' listener (pg-pool removes its own
+  // while the client is out), and pg emits 'error' when the connection drops.
+  // Without this listener that event would crash the whole process.
+  const onError = (): void => {
+    discardClient = true;
+  };
+  client.on('error', onError);
   try {
     await client.query('BEGIN');
     const result = await client.query<{ id: string; name: string }>(
@@ -30,13 +37,14 @@ export async function createOrganizationWithOwner(
     try {
       await client.query('ROLLBACK');
     } catch {
-      rollbackFailed = true;
+      discardClient = true;
     }
     throw error;
   } finally {
+    client.removeListener('error', onError);
     // A truthy value makes pg-pool destroy the client instead of reusing a
     // connection whose transaction state is unknown.
-    client.release(rollbackFailed);
+    client.release(discardClient);
   }
 }
 
