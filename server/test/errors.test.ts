@@ -79,7 +79,7 @@ describe('Error handling middleware', () => {
   });
 
   it('returns 413 Payload Too Large for body over 200 KB', async () => {
-    // Generate a JSON string larger than 200 KB (default limit is 100 KB)
+    // Generate a JSON string larger than 200 KB (the limit is 10 KB)
     const bigBody = JSON.stringify({ data: 'x'.repeat(210 * 1024) });
 
     const res = await request(app)
