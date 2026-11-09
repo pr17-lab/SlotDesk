@@ -20,6 +20,14 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
   },
   telemetry: { enabled: false },
+  advanced: {
+    // Better Auth skips its origin and CSRF checks when NODE_ENV is test or
+    // TEST is set, unless this is set explicitly (better-auth 1.7.18,
+    // dist/context/create-context.mjs). false keeps the checks on in every
+    // environment, including tests and any production process that has TEST
+    // set by mistake. See D-029.
+    disableOriginCheck: false,
+  },
   user: {
     modelName: 'users',
     fields: {
