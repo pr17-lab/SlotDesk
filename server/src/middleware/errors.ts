@@ -3,23 +3,6 @@ import type { Request, Response, NextFunction } from 'express';
 import type { z } from 'zod';
 import { logger } from '../logger.js';
 
-// A typed shape for Express body-parser client errors (bad JSON, oversized body).
-// Express sets `status` (4xx) and `type` on these error objects.
-interface ClientError {
-  status: number;
-}
-
-function isClientError(err: unknown): err is ClientError {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'status' in err &&
-    typeof (err as Record<string, unknown>).status === 'number' &&
-    (err as ClientError).status >= 400 &&
-    (err as ClientError).status <= 499
-  );
-}
-
 export const notFoundHandler = (_req: Request, res: Response): void => {
   res.status(404).json({ error: 'Not found' });
 };
@@ -46,7 +29,18 @@ export const errorHandler = (
     return next(err);
   }
 
-  if (isClientError(err)) {
+  // Express body-parser client errors (bad JSON, oversized body). Express sets
+  // `status` (4xx) and `type` on these error objects. The `in` and `typeof`
+  // checks let TypeScript treat err.status as a number inside this block,
+  // without a cast.
+  if (
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof err.status === 'number' &&
+    err.status >= 400 &&
+    err.status <= 499
+  ) {
     // Use the standard HTTP reason phrase; never expose parser message or stack.
     const phrase = STATUS_CODES[err.status] ?? 'Client Error';
     res.status(err.status).json({ error: phrase });

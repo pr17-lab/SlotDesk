@@ -8,71 +8,42 @@ import {
 } from '../src/config.js';
 
 describe('parsePort', () => {
-  it('returns 3000 for undefined', () => {
-    expect(parsePort(undefined)).toBe(3000);
+  it.each([
+    { name: 'undefined', input: undefined, expected: 3000 },
+    { name: 'empty string', input: '', expected: 3000 },
+    { name: 'spaces-only string', input: '   ', expected: 3000 },
+    { name: '"3000"', input: '3000', expected: 3000 },
+    { name: '" 80 " (trims whitespace)', input: ' 80 ', expected: 80 },
+    { name: '"65535" (max valid port)', input: '65535', expected: 65535 },
+  ])('returns $expected for $name', ({ input, expected }) => {
+    expect(parsePort(input)).toBe(expected);
   });
 
-  it('returns 3000 for empty string', () => {
-    expect(parsePort('')).toBe(3000);
-  });
-
-  it('returns 3000 for spaces-only string', () => {
-    expect(parsePort('   ')).toBe(3000);
-  });
-
-  it('returns 3000 for "3000"', () => {
-    expect(parsePort('3000')).toBe(3000);
-  });
-
-  it('returns 80 for " 80 " (trims whitespace)', () => {
-    expect(parsePort(' 80 ')).toBe(80);
-  });
-
-  it('returns 65535 for "65535" (max valid port)', () => {
-    expect(parsePort('65535')).toBe(65535);
-  });
-
-  it('throws for "3000abc" (non-numeric suffix)', () => {
-    expect(() => parsePort('3000abc')).toThrow();
-  });
-
-  it('throws for "3000.5" (decimal)', () => {
-    expect(() => parsePort('3000.5')).toThrow();
-  });
-
-  it('throws for "0x50" (hex)', () => {
-    expect(() => parsePort('0x50')).toThrow();
-  });
-
-  it('throws for "1e3" (scientific notation)', () => {
-    expect(() => parsePort('1e3')).toThrow();
-  });
-
-  it('throws for "0" (below minimum)', () => {
-    expect(() => parsePort('0')).toThrow();
-  });
-
-  it('throws for "65536" (above maximum)', () => {
-    expect(() => parsePort('65536')).toThrow();
-  });
-
-  it('throws for "-1" (negative)', () => {
-    expect(() => parsePort('-1')).toThrow();
+  it.each([
+    { name: '"3000abc" (non-numeric suffix)', input: '3000abc' },
+    { name: '"3000.5" (decimal)', input: '3000.5' },
+    { name: '"0x50" (hex)', input: '0x50' },
+    { name: '"1e3" (scientific notation)', input: '1e3' },
+    { name: '"0" (below minimum)', input: '0' },
+    { name: '"65536" (above maximum)', input: '65536' },
+    { name: '"-1" (negative)', input: '-1' },
+  ])('throws for $name', ({ input }) => {
+    expect(() => parsePort(input)).toThrow();
   });
 });
 
 describe('databaseUrlSchema (DATABASE_URL validation)', () => {
-  it('accepts a postgres:// URL', () => {
-    const result = databaseUrlSchema.safeParse(
-      'postgres://user:pass@localhost:5432/slotdesk',
-    );
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts a postgresql:// URL', () => {
-    const result = databaseUrlSchema.safeParse(
-      'postgresql://user:pass@localhost:5432/slotdesk',
-    );
+  it.each([
+    {
+      name: 'a postgres:// URL',
+      input: 'postgres://user:pass@localhost:5432/slotdesk',
+    },
+    {
+      name: 'a postgresql:// URL',
+      input: 'postgresql://user:pass@localhost:5432/slotdesk',
+    },
+  ])('accepts $name', ({ input }) => {
+    const result = databaseUrlSchema.safeParse(input);
     expect(result.success).toBe(true);
   });
 
@@ -86,18 +57,12 @@ describe('databaseUrlSchema (DATABASE_URL validation)', () => {
     }
   });
 
-  it('rejects a plain string (not a URL)', () => {
-    const result = databaseUrlSchema.safeParse('not-a-url');
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects an empty string', () => {
-    const result = databaseUrlSchema.safeParse('');
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects undefined', () => {
-    const result = databaseUrlSchema.safeParse(undefined);
+  it.each([
+    { name: 'a plain string (not a URL)', input: 'not-a-url' },
+    { name: 'an empty string', input: '' },
+    { name: 'undefined', input: undefined },
+  ])('rejects $name', ({ input }) => {
+    const result = databaseUrlSchema.safeParse(input);
     expect(result.success).toBe(false);
   });
 });
@@ -151,13 +116,11 @@ describe('authUrlSchema (BETTER_AUTH_URL validation)', () => {
     }
   });
 
-  it('accepts an http:// URL', () => {
-    const result = authUrlSchema.safeParse('http://localhost:3000');
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts an https:// URL', () => {
-    const result = authUrlSchema.safeParse('https://slotdesk.example.com');
+  it.each([
+    { name: 'an http:// URL', input: 'http://localhost:3000' },
+    { name: 'an https:// URL', input: 'https://slotdesk.example.com' },
+  ])('accepts $name', ({ input }) => {
+    const result = authUrlSchema.safeParse(input);
     expect(result.success).toBe(true);
   });
 });
@@ -181,20 +144,22 @@ describe('envSchema (BETTER_AUTH_URL must be https in production)', () => {
     }
   });
 
-  it('accepts an https:// URL in production', () => {
+  it.each([
+    {
+      name: 'an https:// URL in production',
+      nodeEnv: 'production',
+      url: 'https://slotdesk.example.com',
+    },
+    {
+      name: 'an http:// URL in development',
+      nodeEnv: 'development',
+      url: 'http://localhost:3000',
+    },
+  ])('accepts $name', ({ nodeEnv, url }) => {
     const result = envSchema.safeParse({
       ...baseEnv,
-      NODE_ENV: 'production',
-      BETTER_AUTH_URL: 'https://slotdesk.example.com',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts an http:// URL in development', () => {
-    const result = envSchema.safeParse({
-      ...baseEnv,
-      NODE_ENV: 'development',
-      BETTER_AUTH_URL: 'http://localhost:3000',
+      NODE_ENV: nodeEnv,
+      BETTER_AUTH_URL: url,
     });
     expect(result.success).toBe(true);
   });

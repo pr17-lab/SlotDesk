@@ -1,15 +1,5 @@
 import { z } from 'zod';
 
-export type NodeEnv = 'development' | 'test' | 'production';
-
-export interface Config {
-  port: number;
-  nodeEnv: NodeEnv;
-  databaseUrl: string;
-  authSecret: string;
-  authUrl: string;
-}
-
 // Kept as a standalone exported function so existing unit tests can import and
 // exercise every branch directly. The Zod schema below also calls it so the
 // config object always goes through the same rules.
@@ -100,9 +90,8 @@ if (!parsed.success) {
   throw new Error(`Environment configuration error: ${messages}`);
 }
 
-export const config: Config = {
+export const config = {
   port: parsed.data.PORT,
-  nodeEnv: parsed.data.NODE_ENV as NodeEnv,
   databaseUrl: parsed.data.DATABASE_URL,
   authSecret: parsed.data.BETTER_AUTH_SECRET,
   authUrl: parsed.data.BETTER_AUTH_URL,

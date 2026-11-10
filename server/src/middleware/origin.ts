@@ -6,16 +6,16 @@ import { config } from '../config.js';
 // a page on another subdomain of the same site still sends our cookie.
 const trustedOrigin = new URL(config.authUrl).origin;
 
+// Requests with these methods do not change data, so they skip the
+// origin check.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 export const requireTrustedOrigin = (
   req: Request,
   res: Response,
   next: NextFunction,
 ): void => {
-  if (
-    req.method === 'GET' ||
-    req.method === 'HEAD' ||
-    req.method === 'OPTIONS'
-  ) {
+  if (SAFE_METHODS.has(req.method)) {
     next();
     return;
   }
