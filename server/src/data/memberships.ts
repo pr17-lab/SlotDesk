@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { pool } from '../db.js';
 
 export type Role = 'owner' | 'staff';
@@ -20,23 +21,18 @@ export type Member = {
   role: Role;
 };
 
-type MemberRow = { user_id: string; name: string; email: string; role: Role };
-
 export async function listMembers(orgId: string): Promise<Member[]> {
   // Only these four columns: never select anything else from users.
-  const result = await pool.query<MemberRow>(
-    `SELECT m.user_id, u.name, u.email, m.role
+  // The double quotes keep the capital I: without them PostgreSQL would
+  // return the column as "userid".
+  const result = await pool.query<Member>(
+    `SELECT m.user_id AS "userId", u.name, u.email, m.role
      FROM memberships m JOIN users u ON u.id = m.user_id
      WHERE m.org_id = $1
      ORDER BY m.created_at, m.user_id`,
     [orgId],
   );
-  return result.rows.map((row) => ({
-    userId: row.user_id,
-    name: row.name,
-    email: row.email,
-    role: row.role,
-  }));
+  return result.rows;
 }
 
 export type AddStaffResult =
@@ -87,12 +83,11 @@ export async function addStaffMemberByEmail(
 
 // 23505 is PostgreSQL's unique_violation. Only the primary key means
 // "already a member"; any other constraint is a real error and is rethrown.
+// pg turns every error PostgreSQL sends back into a pg.DatabaseError,
+// which carries the error code and the constraint name.
 function isDuplicateMembership(err: unknown): boolean {
   return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    'constraint' in err &&
+    err instanceof pg.DatabaseError &&
     err.code === '23505' &&
     err.constraint === 'memberships_pkey'
   );
