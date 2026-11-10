@@ -11,6 +11,7 @@ import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireMembership } from '../middleware/membership.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
 import { requireSession } from '../middleware/session.js';
+import { membersRouter } from './members.js';
 
 const createOrgSchema = z.object({ name: z.string().trim().min(1).max(100) });
 
@@ -43,6 +44,7 @@ orgsRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
 // req.params.orgId is undefined here. Step 6c adds /members to this router.
 const orgRouter = Router({ mergeParams: true });
 orgRouter.use(requireMembership);
+orgRouter.use('/members', membersRouter);
 
 orgRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   // The organization comes only from the membership check, never from
