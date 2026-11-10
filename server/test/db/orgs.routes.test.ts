@@ -6,8 +6,9 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  findSessionCookie,
   loadAppOnTestDatabase,
+  signIn,
+  signUp,
   tokenFromSessionCookie,
 } from './helpers/auth-app.js';
 import {
@@ -32,31 +33,13 @@ let bob: TestUser;
 let carol: TestUser;
 
 // Signs a user up and returns the session cookie from the sign-up response.
-async function signUp(email: string, name: string): Promise<TestUser> {
-  const res = await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name });
-  expect(res.status).toBe(200);
-  const cookie = findSessionCookie(res.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
+async function createUser(email: string, name: string): Promise<TestUser> {
+  const cookie = await signUp(app, { email, password: PASSWORD, name });
   const row = await client.query<{ id: string }>(
     'SELECT id FROM users WHERE email = $1',
     [email],
   );
-  return { id: row.rows[0]!.id, email, cookie: cookie! };
-}
-
-// A second session for an existing user, via sign-in.
-async function signIn(user: TestUser): Promise<string> {
-  const res = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email: user.email, password: PASSWORD });
-  expect(res.status).toBe(200);
-  const cookie = findSessionCookie(res.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  return cookie!;
+  return { id: row.rows[0]!.id, email, cookie };
 }
 
 async function createOrg(cookie: string, name: string): Promise<string> {
@@ -87,9 +70,9 @@ async function sessionExpiresAt(token: string): Promise<Date | undefined> {
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await signUp('org-alice@example.com', 'Alice');
-  bob = await signUp('org-bob@example.com', 'Bob');
-  carol = await signUp('org-carol@example.com', 'Carol');
+  alice = await createUser('org-alice@example.com', 'Alice');
+  bob = await createUser('org-bob@example.com', 'Bob');
+  carol = await createUser('org-carol@example.com', 'Carol');
 });
 
 afterAll(async () => {
@@ -116,7 +99,10 @@ describe('401: the session check', () => {
   });
 
   it('returns 401 for a cookie whose token has been tampered with', async () => {
-    const cookie = await signIn(alice);
+    const cookie = await signIn(app, {
+      email: alice.email,
+      password: PASSWORD,
+    });
     // Change the first character of the token part (just after "name=").
     const eq = cookie.indexOf('=');
     const first = cookie[eq + 1];
@@ -132,7 +118,10 @@ describe('401: the session check', () => {
   });
 
   it('returns 401 for a cookie from a signed-out session', async () => {
-    const cookie = await signIn(alice);
+    const cookie = await signIn(app, {
+      email: alice.email,
+      password: PASSWORD,
+    });
     const signOut = await request(app)
       .post('/api/auth/sign-out')
       .set('Origin', TRUSTED_ORIGIN)
@@ -145,7 +134,10 @@ describe('401: the session check', () => {
   });
 
   it('returns 401 for an expired session, and the library deletes its row', async () => {
-    const cookie = await signIn(alice);
+    const cookie = await signIn(app, {
+      email: alice.email,
+      password: PASSWORD,
+    });
     const token = tokenFromSessionCookie(cookie);
     await client.query(
       "UPDATE sessions SET expires_at = now() - interval '1 minute' WHERE token = $1",
@@ -441,7 +433,10 @@ describe('413: the 10 KB body limit', () => {
 
 describe('read-only session check', () => {
   it('does not refresh a session inside the refresh window; /api/auth/get-session does (positive control)', async () => {
-    const cookie = await signIn(alice);
+    const cookie = await signIn(app, {
+      email: alice.email,
+      password: PASSWORD,
+    });
     const token = tokenFromSessionCookie(cookie);
     // Inside Better Auth's daily refresh window: with the default expiresIn of
     // 7 days and updateAge of 1 day, a session is refreshed once expires_at

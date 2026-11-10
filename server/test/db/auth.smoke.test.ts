@@ -12,7 +12,10 @@
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { loadAppOnTestDatabase } from './helpers/auth-app.js';
+import {
+  findSessionCookie,
+  loadAppOnTestDatabase,
+} from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -57,10 +60,7 @@ it('signs up with email and password, then finds the session', async () => {
 
   // Keep only the "name=value" part of the session cookie. Assertions compare
   // booleans so a failure never prints the cookie or the token.
-  const setCookie = signUp.get('Set-Cookie') ?? [];
-  const sessionCookie = setCookie
-    .find((c) => c.startsWith('better-auth.session_token='))
-    ?.split(';')[0];
+  const sessionCookie = findSessionCookie(signUp.get('Set-Cookie') ?? []);
   expect(sessionCookie !== undefined).toBe(true);
 
   const session = await request(app)

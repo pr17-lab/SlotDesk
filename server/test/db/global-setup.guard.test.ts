@@ -77,6 +77,10 @@ describe('global-setup guard', () => {
       // Must mention _test in the message.
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toMatch(/_test/);
+      // Check 2 (the name in the URL) must refuse it, before any connection.
+      expect((err as Error).message).toMatch(
+        /^TEST_DATABASE_URL database name "/,
+      );
     } finally {
       // Restore the real TEST_DATABASE_URL so subsequent tests are unaffected.
       if (originalUrl !== undefined) {

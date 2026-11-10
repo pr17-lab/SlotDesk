@@ -12,6 +12,7 @@ import pg from 'pg';
 // refuses a bad URL without touching any database.
 export function requireTestDatabase(): {
   url: string;
+  dbName: string;
   createClient: () => pg.Client;
 } {
   const url = process.env['TEST_DATABASE_URL'];
@@ -41,10 +42,11 @@ export function requireTestDatabase(): {
   }
 
   // Return the URL and a factory so each test can open its own Client.
-  // Check 3 (SELECT current_database()) is done by connectTestClient below,
+  // Check 3 (SELECT current_database()) is done by connectAndVerify below,
   // which every test file calls on its client before inserting data.
   return {
     url,
+    dbName,
     createClient: () => new pg.Client({ connectionString: url }),
   };
 }
@@ -66,6 +68,21 @@ export async function connectAndVerify(client: pg.Client): Promise<void> {
       `Connected database "${liveDbName}" does not end in _test. ` +
         'Refusing to run against a non-test database.',
     );
+  }
+}
+
+// Runs a statement that must fail and returns its PostgreSQL error. If the
+// statement succeeds, it throws instead. Any error that is not a PostgreSQL
+// error is passed on unchanged.
+export async function expectError(
+  fn: () => Promise<unknown>,
+): Promise<pg.DatabaseError> {
+  try {
+    await fn();
+    throw new Error('Expected a database error but the statement succeeded.');
+  } catch (err) {
+    if (err instanceof pg.DatabaseError) return err;
+    throw err;
   }
 }
 

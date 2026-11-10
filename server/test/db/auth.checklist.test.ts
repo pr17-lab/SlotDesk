@@ -57,8 +57,9 @@ import {
   cookieAttributes,
   cookieName,
   countIdentityTables,
-  findSessionCookie,
   loadAppOnTestDatabase,
+  signIn,
+  signUp,
   tokenFromSessionCookie,
 } from './helpers/auth-app.js';
 import {
@@ -100,19 +101,10 @@ afterAll(async () => {
 
 it('creates a sessions row at sign-in with expires_at about 7 days ahead', async () => {
   const email = 'checklist-session-row@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Session Row' });
+  await signUp(app, { email, password: PASSWORD, name: 'Session Row' });
 
-  const signIn = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  expect(signIn.status).toBe(200);
-  const cookie = findSessionCookie(signIn.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const token = tokenFromSessionCookie(cookie!);
+  const cookie = await signIn(app, { email, password: PASSWORD });
+  const token = tokenFromSessionCookie(cookie);
 
   const row = await client.query<{ expires_at: Date }>(
     'SELECT expires_at FROM sessions WHERE token = $1',
@@ -128,24 +120,12 @@ it('creates a sessions row at sign-in with expires_at about 7 days ahead', async
 
 it('logout deletes only the signed-out session, leaving the other session valid', async () => {
   const email = 'checklist-logout@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Logout' });
+  await signUp(app, { email, password: PASSWORD, name: 'Logout' });
 
-  const signInA = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookieA = findSessionCookie(signInA.get('Set-Cookie') ?? []);
-  const signInB = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookieB = findSessionCookie(signInB.get('Set-Cookie') ?? []);
-  expect(cookieA !== undefined && cookieB !== undefined).toBe(true);
-  const tokenA = tokenFromSessionCookie(cookieA!);
-  const tokenB = tokenFromSessionCookie(cookieB!);
+  const cookieA = await signIn(app, { email, password: PASSWORD });
+  const cookieB = await signIn(app, { email, password: PASSWORD });
+  const tokenA = tokenFromSessionCookie(cookieA);
+  const tokenB = tokenFromSessionCookie(cookieB);
 
   const before = await client.query(
     'SELECT 1 FROM sessions WHERE token = ANY($1)',
@@ -156,7 +136,7 @@ it('logout deletes only the signed-out session, leaving the other session valid'
   const signOutA = await request(app)
     .post('/api/auth/sign-out')
     .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookieA!);
+    .set('Cookie', cookieA);
   expect(signOutA.status).toBe(200);
 
   const rowA = await client.query('SELECT 1 FROM sessions WHERE token = $1', [
@@ -170,13 +150,13 @@ it('logout deletes only the signed-out session, leaving the other session valid'
 
   const getSessionA = await request(app)
     .get('/api/auth/get-session')
-    .set('Cookie', cookieA!);
+    .set('Cookie', cookieA);
   expect(getSessionA.status).toBe(200);
   expect(getSessionA.body).toBeNull();
 
   const getSessionB = await request(app)
     .get('/api/auth/get-session')
-    .set('Cookie', cookieB!);
+    .set('Cookie', cookieB);
   expect(getSessionB.status).toBe(200);
   expect(getSessionB.body?.user?.email).toBe(email);
 });
@@ -188,17 +168,9 @@ it('logout deletes only the signed-out session, leaving the other session valid'
 // be re-evaluated before relying on it again.
 it('documents plain-text session token storage (D-029 accepted risk A)', async () => {
   const email = 'checklist-token-storage@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Token Storage' });
-  const signIn = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookie = findSessionCookie(signIn.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const cookieToken = tokenFromSessionCookie(cookie!);
+  await signUp(app, { email, password: PASSWORD, name: 'Token Storage' });
+  const cookie = await signIn(app, { email, password: PASSWORD });
+  const cookieToken = tokenFromSessionCookie(cookie);
   expect(cookieToken.length).toBe(32);
 
   // Found by the user, not by the token, so the comparison below is a real
@@ -217,17 +189,14 @@ it('documents plain-text session token storage (D-029 accepted risk A)', async (
 
 it('sets exactly one HttpOnly, SameSite=Lax, Path=/ session cookie without Secure or a cookie-cache cookie', async () => {
   const email = 'checklist-cookie-attrs@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Cookie Attrs' });
-  const signIn = await request(app)
+  await signUp(app, { email, password: PASSWORD, name: 'Cookie Attrs' });
+  const signInRes = await request(app)
     .post('/api/auth/sign-in/email')
     .set('Origin', TRUSTED_ORIGIN)
     .send({ email, password: PASSWORD });
-  expect(signIn.status).toBe(200);
+  expect(signInRes.status).toBe(200);
 
-  const setCookie = signIn.get('Set-Cookie') ?? [];
+  const setCookie = signInRes.get('Set-Cookie') ?? [];
   expect(setCookie.length).toBe(1);
   const entry = setCookie[0]!;
   expect(cookieName(entry)).toBe('better-auth.session_token');
@@ -252,23 +221,15 @@ it('sets exactly one HttpOnly, SameSite=Lax, Path=/ session cookie without Secur
 
 it('rejects cross-origin sign-out and update-user with a valid cookie, then the same requests succeed from the trusted origin (positive control)', async () => {
   const email = 'checklist-cross-origin@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Original Name' });
-  const signIn = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookie = findSessionCookie(signIn.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const token = tokenFromSessionCookie(cookie!);
+  await signUp(app, { email, password: PASSWORD, name: 'Original Name' });
+  const cookie = await signIn(app, { email, password: PASSWORD });
+  const token = tokenFromSessionCookie(cookie);
 
   // Evil origin: update-user rejected, name unchanged.
   const evilUpdate = await request(app)
     .post('/api/auth/update-user')
     .set('Origin', EVIL_ORIGIN)
-    .set('Cookie', cookie!)
+    .set('Cookie', cookie)
     .send({ name: 'Hacked Name' });
   // STOP condition (checklist requirement 13): if this is not a 4xx, the
   // cross-origin check has failed and D-029 must be re-evaluated before
@@ -285,7 +246,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
   const evilSignOut = await request(app)
     .post('/api/auth/sign-out')
     .set('Origin', EVIL_ORIGIN)
-    .set('Cookie', cookie!);
+    .set('Cookie', cookie);
   expect(evilSignOut.status >= 400 && evilSignOut.status < 500).toBe(true);
   expect(evilSignOut.body.code).toBe('INVALID_ORIGIN');
   const sessionStillThere = await client.query(
@@ -298,7 +259,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
   const trustedUpdate = await request(app)
     .post('/api/auth/update-user')
     .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie!)
+    .set('Cookie', cookie)
     .send({ name: 'Renamed' });
   expect(trustedUpdate.status).toBe(200);
   const nameAfterTrusted = await client.query<{ name: string }>(
@@ -311,7 +272,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
   const trustedSignOut = await request(app)
     .post('/api/auth/sign-out')
     .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie!);
+    .set('Cookie', cookie);
   expect(trustedSignOut.status).toBe(200);
   const sessionGone = await client.query(
     'SELECT 1 FROM sessions WHERE token = $1',
@@ -322,21 +283,13 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
 
 it('rejects a cookie-bearing POST with no Origin or Referer header (MISSING_OR_NULL_ORIGIN)', async () => {
   const email = 'checklist-no-origin@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'No Origin' });
-  const signIn = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookie = findSessionCookie(signIn.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const token = tokenFromSessionCookie(cookie!);
+  await signUp(app, { email, password: PASSWORD, name: 'No Origin' });
+  const cookie = await signIn(app, { email, password: PASSWORD });
+  const token = tokenFromSessionCookie(cookie);
 
   const res = await request(app)
     .post('/api/auth/sign-out')
-    .set('Cookie', cookie!);
+    .set('Cookie', cookie);
   expect(res.status).toBe(403);
   expect(res.body.code).toBe('MISSING_OR_NULL_ORIGIN');
   // Rejected in middleware, before the handler ran: session untouched.
@@ -349,10 +302,7 @@ it('rejects a cookie-bearing POST with no Origin or Referer header (MISSING_OR_N
 
 it('rejects a cross-site navigation login attempt flagged by Sec-Fetch-Site/Sec-Fetch-Mode (CROSS_SITE_NAVIGATION_LOGIN_BLOCKED)', async () => {
   const email = 'checklist-cross-site-nav@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Cross Site Nav' });
+  await signUp(app, { email, password: PASSWORD, name: 'Cross Site Nav' });
 
   const res = await request(app)
     .post('/api/auth/sign-in/email')
@@ -365,10 +315,7 @@ it('rejects a cross-site navigation login attempt flagged by Sec-Fetch-Site/Sec-
 
 it('rejects a cookie-less sign-in POST from an untrusted Origin (login CSRF, INVALID_ORIGIN)', async () => {
   const email = 'checklist-login-csrf@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Login CSRF' });
+  await signUp(app, { email, password: PASSWORD, name: 'Login CSRF' });
 
   const res = await request(app)
     .post('/api/auth/sign-in/email')
@@ -388,13 +335,13 @@ it('completes a two-segment /api/auth POST with a JSON body, and 404s an unknown
     .send({ email, password: PASSWORD, name: 'Mounting' })
     .timeout(5000);
 
-  const signIn = await request(app)
+  const signInRes = await request(app)
     .post('/api/auth/sign-in/email')
     .set('Origin', TRUSTED_ORIGIN)
     .send({ email, password: PASSWORD })
     .timeout(5000);
-  expect(signIn.status).toBe(200);
-  expect((signIn.get('Set-Cookie') ?? []).length > 0).toBe(true);
+  expect(signInRes.status).toBe(200);
+  expect((signInRes.get('Set-Cookie') ?? []).length > 0).toBe(true);
 
   const missing = await request(app).get('/api/auth/not-a-route').timeout(5000);
   expect(missing.status).toBe(404);
@@ -475,10 +422,7 @@ it('rejects a 14-character password (PASSWORD_TOO_SHORT) and a 129-character pas
 
 it('rejects request-password-reset for an existing user with 400 RESET_PASSWORD_DISABLED, leaving every identity table unchanged', async () => {
   const email = 'checklist-reset-request@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Reset Request' });
+  await signUp(app, { email, password: PASSWORD, name: 'Reset Request' });
 
   const before = await countIdentityTables(client);
   const res = await request(app)
@@ -495,10 +439,7 @@ it('rejects request-password-reset for an existing user with 400 RESET_PASSWORD_
 
 it('rejects reset-password with a made-up token and a valid new password, leaving the password hash unchanged', async () => {
   const email = 'checklist-reset-password@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Reset Password' });
+  await signUp(app, { email, password: PASSWORD, name: 'Reset Password' });
 
   const findHash = () =>
     client.query<{ password: string }>(

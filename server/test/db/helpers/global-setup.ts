@@ -22,10 +22,9 @@
 // The `runner` function is the same one the CLI uses internally.
 
 import { runner } from 'node-pg-migrate';
-import pg from 'pg';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { connectAndVerify } from './db-guard.js';
+import { connectAndVerify, requireTestDatabase } from './db-guard.js';
 
 // Resolve the migrations directory relative to this file's location.
 // This file lives at server/test/db/helpers/global-setup.ts.
@@ -34,34 +33,14 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const migrationsDir = resolve(__dirname, '../../../migrations');
 
 export async function setup(): Promise<void> {
-  const url = process.env['TEST_DATABASE_URL'];
-
-  if (!url) {
-    throw new Error(
-      'TEST_DATABASE_URL is not set. ' +
-        'Cannot run the global migration setup for database tests.',
-    );
-  }
-
-  // Validate database name ends in _test before connecting.
-  let dbName: string;
-  try {
-    dbName = new URL(url).pathname.replace(/^\//, '');
-  } catch {
-    throw new Error(`TEST_DATABASE_URL is not a valid URL: ${url}`);
-  }
-
-  if (!dbName.endsWith('_test')) {
-    throw new Error(
-      `TEST_DATABASE_URL database "${dbName}" does not end in _test. ` +
-        'Refusing to reset a non-test database.',
-    );
-  }
+  // Checks 1 and 2 (TEST_DATABASE_URL is set, and the database name in it
+  // ends in _test) run inside requireTestDatabase, before any connection.
+  const { url, dbName, createClient } = requireTestDatabase();
 
   // Check 3: open a short-lived connection and verify current_database() ends
   // in _test. If the database name in the URL does not match what PostgreSQL
   // reports, connectAndVerify throws and nothing is reverted or applied.
-  const probe = new pg.Client({ connectionString: url });
+  const probe = createClient();
   await connectAndVerify(probe);
   await probe.end();
 

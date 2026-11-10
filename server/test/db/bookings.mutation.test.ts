@@ -14,6 +14,7 @@
 
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { slotFor } from './helpers/booking-data.js';
 import { connectAndVerify, requireTestDatabase } from './helpers/db-guard.js';
 import {
   AttemptOutcome,
@@ -32,15 +33,9 @@ let setupClient: pg.Client;
 // Race clients are opened inside the test so they can be closed in finally.
 let raceClients: pg.Client[] = [];
 
-// Return a fixed UTC slot for the given round index.
 // Same scheme as the race test: 1-hour slots starting 2027-06-01 00:00Z,
 // offset from the race test's range so the two tests never share slots.
-function slotFor(round: number): { startsAt: string; endsAt: string } {
-  const base = new Date('2027-06-01T00:00:00Z');
-  const startsAt = new Date(base.getTime() + round * 60 * 60 * 1000);
-  const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
-  return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
-}
+const SLOT_BASE = '2027-06-01T00:00:00Z';
 
 beforeAll(async () => {
   setupClient = createClient();
@@ -87,7 +82,7 @@ it('naive SELECT-then-INSERT lets multiple connections double-book the same slot
   const spreadMsPerRound: number[] = [];
 
   for (let round = 0; round < ROUNDS; round++) {
-    const { startsAt, endsAt } = slotFor(round);
+    const { startsAt, endsAt } = slotFor(SLOT_BASE, round);
 
     const { outcomes, spreadMs } = await fireTogether(
       raceClients,

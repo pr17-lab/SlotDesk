@@ -8,9 +8,8 @@
 // Without either fix, Vitest reports an unhandled 'error' event and the run
 // fails.
 import pg from 'pg';
-import request from 'supertest';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { loadAppOnTestDatabase } from './helpers/auth-app.js';
+import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -18,7 +17,6 @@ import {
 } from './helpers/db-guard.js';
 import { logger } from '../../src/logger.js';
 
-const TRUSTED_ORIGIN = 'http://localhost:3000';
 // 15+ characters, the minimum set in src/auth.ts. Never printed.
 const PASSWORD = 'connection-loss-pw-15chars';
 
@@ -64,11 +62,7 @@ function wait(ms: number): Promise<void> {
 
 it('fails the create transaction without crashing when its connection dies', async () => {
   const email = 'connection-loss@example.com';
-  const signUp = await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Connection Loss' });
-  expect(signUp.status).toBe(200);
+  await signUp(app, { email, password: PASSWORD, name: 'Connection Loss' });
   const user = await client.query<{ id: string }>(
     'SELECT id FROM users WHERE email = $1',
     [email],

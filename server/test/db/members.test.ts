@@ -5,10 +5,7 @@
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  findSessionCookie,
-  loadAppOnTestDatabase,
-} from './helpers/auth-app.js';
+import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -35,19 +32,13 @@ let orgA: string;
 let orgB: string;
 
 // Signs a user up and returns the session cookie from the sign-up response.
-async function signUp(email: string, name: string): Promise<TestUser> {
-  const res = await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name });
-  expect(res.status).toBe(200);
-  const cookie = findSessionCookie(res.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
+async function createUser(email: string, name: string): Promise<TestUser> {
+  const cookie = await signUp(app, { email, password: PASSWORD, name });
   const row = await client.query<{ id: string }>(
     'SELECT id FROM users WHERE email = $1',
     [email],
   );
-  return { id: row.rows[0]!.id, name, email, cookie: cookie! };
+  return { id: row.rows[0]!.id, name, email, cookie };
 }
 
 async function createOrg(cookie: string, name: string): Promise<string> {
@@ -106,11 +97,11 @@ function observed(res: request.Response) {
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await signUp('org-alice@example.com', 'Alice');
-  bob = await signUp('org-bob@example.com', 'Bob');
-  carol = await signUp('org-carol@example.com', 'Carol');
-  dave = await signUp('org-dave@example.com', 'Dave');
-  erin = await signUp('org-erin@example.com', 'Erin');
+  alice = await createUser('org-alice@example.com', 'Alice');
+  bob = await createUser('org-bob@example.com', 'Bob');
+  carol = await createUser('org-carol@example.com', 'Carol');
+  dave = await createUser('org-dave@example.com', 'Dave');
+  erin = await createUser('org-erin@example.com', 'Erin');
   orgA = await createOrg(alice.cookie, 'Members Org A');
   orgB = await createOrg(dave.cookie, 'Members Org B');
   await client.query(
