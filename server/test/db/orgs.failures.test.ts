@@ -7,8 +7,8 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
-  findSessionCookie,
   loadAppOnTestDatabase,
+  signUp,
   tokenFromSessionCookie,
 } from './helpers/auth-app.js';
 import {
@@ -18,7 +18,6 @@ import {
 } from './helpers/db-guard.js';
 import { installCaptureSpies } from './helpers/log-capture.js';
 
-const TRUSTED_ORIGIN = 'http://localhost:3000';
 // 15+ characters, the minimum set in src/auth.ts. Never printed.
 const PASSWORD = 'org-failures-pw-15chars';
 
@@ -60,18 +59,12 @@ it('rolls back the organization when the owner membership insert fails, and rele
 });
 
 it('returns 500 and never logs the token when the database fails under the session check', async () => {
-  const signUp = await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({
-      email: 'org-failures@example.com',
-      password: PASSWORD,
-      name: 'Org Failures',
-    });
-  expect(signUp.status).toBe(200);
-  const cookie = findSessionCookie(signUp.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const rawToken = tokenFromSessionCookie(cookie!);
+  const cookie = await signUp(app, {
+    email: 'org-failures@example.com',
+    password: PASSWORD,
+    name: 'Org Failures',
+  });
+  const rawToken = tokenFromSessionCookie(cookie);
 
   const captured: string[] = [];
   const spies = installCaptureSpies(captured);
@@ -82,7 +75,7 @@ it('returns 500 and never logs the token when the database fails under the sessi
       'ALTER TABLE sessions RENAME COLUMN token TO token_renamed',
     );
     try {
-      res = await request(app).get('/api/orgs').set('Cookie', cookie!);
+      res = await request(app).get('/api/orgs').set('Cookie', cookie);
     } finally {
       await client.query(
         'ALTER TABLE sessions RENAME COLUMN token_renamed TO token',
@@ -102,7 +95,7 @@ it('returns 500 and never logs the token when the database fails under the sessi
   ).length;
 
   // The column is back: the same cookie works again.
-  const after = await request(app).get('/api/orgs').set('Cookie', cookie!);
+  const after = await request(app).get('/api/orgs').set('Cookie', cookie);
   expect(after.status).toBe(200);
 
   // Counts only. process.stdout.write because Vitest's default reporter only

@@ -14,8 +14,9 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
-  findSessionCookie,
   loadAppOnTestDatabase,
+  signIn,
+  signUp,
   tokenFromSessionCookie,
 } from './helpers/auth-app.js';
 import {
@@ -49,17 +50,9 @@ afterAll(async () => {
 
 it('never logs the session token when the database fails underneath get-session or sign-out', async () => {
   const email = 'token-logs@example.com';
-  await request(app)
-    .post('/api/auth/sign-up/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD, name: 'Token Logs' });
-  const signIn = await request(app)
-    .post('/api/auth/sign-in/email')
-    .set('Origin', TRUSTED_ORIGIN)
-    .send({ email, password: PASSWORD });
-  const cookie = findSessionCookie(signIn.get('Set-Cookie') ?? []);
-  expect(cookie !== undefined).toBe(true);
-  const rawToken = tokenFromSessionCookie(cookie!);
+  await signUp(app, { email, password: PASSWORD, name: 'Token Logs' });
+  const cookie = await signIn(app, { email, password: PASSWORD });
+  const rawToken = tokenFromSessionCookie(cookie);
 
   const captured: string[] = [];
   const spies = installCaptureSpies(captured);
@@ -79,11 +72,11 @@ it('never logs the session token when the database fails underneath get-session 
     try {
       getSessionRes = await request(app)
         .get('/api/auth/get-session')
-        .set('Cookie', cookie!);
+        .set('Cookie', cookie);
       signOutRes = await request(app)
         .post('/api/auth/sign-out')
         .set('Origin', TRUSTED_ORIGIN)
-        .set('Cookie', cookie!);
+        .set('Cookie', cookie);
     } finally {
       await client.query(
         'ALTER TABLE sessions RENAME COLUMN token_renamed TO token',
@@ -115,7 +108,7 @@ it('never logs the session token when the database fails underneath get-session 
     // survived the sign-out that reported success.
     const afterScenario1 = await request(app)
       .get('/api/auth/get-session')
-      .set('Cookie', cookie!);
+      .set('Cookie', cookie);
     expect(afterScenario1.status).toBe(200);
     expect(afterScenario1.body?.user?.email).toBe(email);
 
@@ -127,11 +120,11 @@ it('never logs the session token when the database fails underneath get-session 
 
     const getSessionRes2 = await request(app)
       .get('/api/auth/get-session')
-      .set('Cookie', cookie!);
+      .set('Cookie', cookie);
     const signOutRes2 = await request(app)
       .post('/api/auth/sign-out')
       .set('Origin', TRUSTED_ORIGIN)
-      .set('Cookie', cookie!);
+      .set('Cookie', cookie);
     scenario2 = {
       getSessionStatus: getSessionRes2.status,
       signOutStatus: signOutRes2.status,

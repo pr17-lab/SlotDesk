@@ -20,6 +20,7 @@
 
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { insertOrg, insertResource, slotFor } from './helpers/booking-data.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -44,35 +45,9 @@ let resourceId: bigint;
 // Race clients are opened inside the test so we can close them in finally.
 let raceClients: pg.Client[] = [];
 
-async function insertOrg(c: pg.Client, name: string): Promise<bigint> {
-  const r = await c.query<{ id: string }>(
-    'INSERT INTO organizations (name) VALUES ($1) RETURNING id',
-    [name],
-  );
-  return BigInt(r.rows[0]!.id);
-}
-
-async function insertResource(
-  c: pg.Client,
-  oid: bigint,
-  name: string,
-): Promise<bigint> {
-  const r = await c.query<{ id: string }>(
-    "INSERT INTO resources (org_id, name, time_zone) VALUES ($1, $2, 'UTC') RETURNING id",
-    [oid, name],
-  );
-  return BigInt(r.rows[0]!.id);
-}
-
-// Return a fixed UTC slot for the given round index.
 // Slots start at 2027-01-01 00:00Z and step by 1 hour per round so no two
-// rounds overlap. Fixed times (not "now") make failures reproducible.
-function slotFor(round: number): { startsAt: string; endsAt: string } {
-  const base = new Date('2027-01-01T00:00:00Z');
-  const startsAt = new Date(base.getTime() + round * 60 * 60 * 1000);
-  const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
-  return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
-}
+// rounds overlap.
+const SLOT_BASE = '2027-01-01T00:00:00Z';
 
 beforeAll(async () => {
   setupClient = createClient();
@@ -111,7 +86,7 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
   const spreadMsPerRound: number[] = [];
 
   for (let round = 0; round < ROUNDS; round++) {
-    const { startsAt, endsAt } = slotFor(round);
+    const { startsAt, endsAt } = slotFor(SLOT_BASE, round);
 
     const { outcomes, spreadMs } = await fireTogether(
       raceClients,

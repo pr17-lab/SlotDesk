@@ -7,6 +7,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   connectAndVerify,
+  expectError,
   requireTestDatabase,
   truncateTables,
 } from './helpers/db-guard.js';
@@ -43,19 +44,6 @@ async function countRows(
 ): Promise<number> {
   const r = await c.query<{ count: string }>(sql, params);
   return Number(r.rows[0]!.count);
-}
-
-// Run a statement and return the pg error, or null if it succeeded.
-async function expectError(
-  fn: () => Promise<unknown>,
-): Promise<pg.DatabaseError> {
-  try {
-    await fn();
-    throw new Error('Expected a database error but the statement succeeded.');
-  } catch (err) {
-    if (err instanceof pg.DatabaseError) return err;
-    throw err;
-  }
 }
 
 // ── Setup / teardown ─────────────────────────────────────────────────────────

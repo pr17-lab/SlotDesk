@@ -5,8 +5,10 @@
 
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { insertOrg, insertResource } from './helpers/booking-data.js';
 import {
   connectAndVerify,
+  expectError,
   requireTestDatabase,
   truncateTables,
 } from './helpers/db-guard.js';
@@ -25,28 +27,6 @@ let resourceId: bigint;
 let resource2Id: bigint;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-// Insert one organization and return its id.
-async function insertOrg(c: pg.Client, name: string): Promise<bigint> {
-  const r = await c.query<{ id: string }>(
-    'INSERT INTO organizations (name) VALUES ($1) RETURNING id',
-    [name],
-  );
-  return BigInt(r.rows[0]!.id);
-}
-
-// Insert one resource under the given org and return its id.
-async function insertResource(
-  c: pg.Client,
-  oid: bigint,
-  name: string,
-): Promise<bigint> {
-  const r = await c.query<{ id: string }>(
-    "INSERT INTO resources (org_id, name, time_zone) VALUES ($1, $2, 'UTC') RETURNING id",
-    [oid, name],
-  );
-  return BigInt(r.rows[0]!.id);
-}
 
 // Insert a confirmed booking and return its id.
 async function insertBooking(
@@ -67,19 +47,6 @@ async function insertBooking(
     [oid, rid, startsAt, endsAt, status, customerName, customerEmail],
   );
   return BigInt(r.rows[0]!.id);
-}
-
-// Run a statement and return the pg error, or null if it succeeded.
-async function expectError(
-  fn: () => Promise<unknown>,
-): Promise<pg.DatabaseError> {
-  try {
-    await fn();
-    throw new Error('Expected a database error but the statement succeeded.');
-  } catch (err) {
-    if (err instanceof pg.DatabaseError) return err;
-    throw err;
-  }
 }
 
 // ── Setup / teardown ─────────────────────────────────────────────────────────

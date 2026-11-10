@@ -6,14 +6,11 @@
 // point DATABASE_URL at the test database BEFORE the app (and therefore
 // db.ts and auth.ts) is loaded. Vitest gives each test file a fresh module
 // registry, so this does not leak into other files.
+import type { Express } from 'express';
 import pg from 'pg';
+import request from 'supertest';
+import { expect } from 'vitest';
 import { requireTestDatabase } from './db-guard.js';
-
-export type AppUnderTest = {
-  app: Awaited<ReturnType<typeof loadApp>>['app'];
-  pool: Awaited<ReturnType<typeof loadApp>>['pool'];
-  auth: Awaited<ReturnType<typeof loadApp>>['auth'];
-};
 
 async function loadApp() {
   const { app } = await import('../../../src/app.js');
@@ -27,7 +24,7 @@ async function loadApp() {
 // refuse to continue unless the app's own pool reports a _test database.
 // Call this with top-level await so a failed check stops the whole file
 // before any test runs.
-export async function loadAppOnTestDatabase(): Promise<AppUnderTest> {
+export async function loadAppOnTestDatabase() {
   const { url } = requireTestDatabase();
 
   process.env.DATABASE_URL = url;
@@ -56,6 +53,44 @@ export function findSessionCookie(setCookie: string[]): string | undefined {
   return setCookie
     .find((entry) => entry.startsWith(`${SESSION_COOKIE_NAME}=`))
     ?.split(';')[0];
+}
+
+// The trusted origin: vitest.db.config.ts sets BETTER_AUTH_URL to it.
+const TRUSTED_ORIGIN = 'http://localhost:3000';
+
+// Signs a new user up through the real app, from the trusted origin, and
+// returns the session cookie ("name=value" only) that sign-up sets. Fails
+// the test unless sign-up answers 200 with a session cookie. The cookie
+// check compares a boolean, so a failure never prints the cookie.
+export async function signUp(
+  app: Express,
+  user: { email: string; password: string; name: string },
+): Promise<string> {
+  const res = await request(app)
+    .post('/api/auth/sign-up/email')
+    .set('Origin', TRUSTED_ORIGIN)
+    .send(user);
+  expect(res.status).toBe(200);
+  const cookie = findSessionCookie(res.get('Set-Cookie') ?? []);
+  expect(cookie !== undefined).toBe(true);
+  return cookie!;
+}
+
+// Signs an existing user in from the trusted origin and returns the new
+// session cookie ("name=value" only): a second session if the user already
+// has one. Same checks as signUp.
+export async function signIn(
+  app: Express,
+  user: { email: string; password: string },
+): Promise<string> {
+  const res = await request(app)
+    .post('/api/auth/sign-in/email')
+    .set('Origin', TRUSTED_ORIGIN)
+    .send(user);
+  expect(res.status).toBe(200);
+  const cookie = findSessionCookie(res.get('Set-Cookie') ?? []);
+  expect(cookie !== undefined).toBe(true);
+  return cookie!;
 }
 
 // Extracts the raw token from a session cookie's "name=value" part. The
