@@ -27,6 +27,12 @@ export const auth = betterAuth({
     // environment, including tests and any production process that has TEST
     // set by mistake. See D-029.
     disableOriginCheck: false,
+    // Render sits behind Cloudflare. There, x-forwarded-for arrives with more
+    // than one address, and a client can add its own. Better Auth 1.7.18
+    // skips a header with more than one address, and in production it then
+    // puts all visitors into one shared rate-limit bucket. Cloudflare sets
+    // cf-connecting-ip to a single address, so we read only that. See D-031.
+    ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
   },
   user: {
     modelName: 'users',

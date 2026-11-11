@@ -3,8 +3,9 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 
 // One connection pool for the entire application. No queries run at startup;
-// the pool connects on first use. There is a single DATABASE_URL until Step 7
-// adds a direct-connection URL for Neon (D-023).
+// the pool connects on first use. One DATABASE_URL is used by the app and by
+// migrations; in production it is Neon's direct (non-pooled) connection
+// string (D-031).
 export const pool = new pg.Pool({ connectionString: config.databaseUrl });
 
 // pg-pool re-emits an idle client's connection error on the pool, and an
