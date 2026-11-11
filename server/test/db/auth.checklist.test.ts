@@ -475,3 +475,49 @@ it('redirects the GET reset-password/:token callback for a made-up token, changi
   const after = await countIdentityTables(client);
   expect(after).toEqual(before);
 });
+
+// --- Client IP (D-031): read only from cf-connecting-ip ---
+
+it('records the cf-connecting-ip address as the session IP, ignoring x-forwarded-for', async () => {
+  const email = 'checklist-ip-cloudflare@example.com';
+  const res = await request(app)
+    .post('/api/auth/sign-up/email')
+    .set('Origin', TRUSTED_ORIGIN)
+    .set('CF-Connecting-IP', '203.0.113.7')
+    .set('X-Forwarded-For', '198.51.100.9')
+    .send({ email, password: PASSWORD, name: 'IP Cloudflare' });
+  expect(res.status).toBe(200);
+
+  // Selects only ip_address, so a failure message cannot print a token.
+  const rows = await client.query<{ ip_address: string | null }>(
+    `SELECT s.ip_address FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE u.email = $1`,
+    [email],
+  );
+  const ips = rows.rows.map((row) => row.ip_address);
+  expect(ips.length > 0).toBe(true);
+  expect(ips.filter((ip) => ip !== '203.0.113.7')).toEqual([]);
+});
+
+it('does not read x-forwarded-for: with only that header the session IP is the test fallback 127.0.0.1', async () => {
+  const email = 'checklist-ip-forwarded-only@example.com';
+  const res = await request(app)
+    .post('/api/auth/sign-up/email')
+    .set('Origin', TRUSTED_ORIGIN)
+    .set('X-Forwarded-For', '198.51.100.9')
+    .send({ email, password: PASSWORD, name: 'IP Forwarded Only' });
+  expect(res.status).toBe(200);
+
+  // x-forwarded-for is no longer read, so Better Auth finds no IP. With no IP
+  // it falls back to 127.0.0.1 when NODE_ENV is test or development; in
+  // production it records no IP at all.
+  // Selects only ip_address, so a failure message cannot print a token.
+  const rows = await client.query<{ ip_address: string | null }>(
+    `SELECT s.ip_address FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE u.email = $1`,
+    [email],
+  );
+  const ips = rows.rows.map((row) => row.ip_address);
+  expect(ips.length > 0).toBe(true);
+  expect(ips.filter((ip) => ip !== '127.0.0.1')).toEqual([]);
+});
