@@ -9,6 +9,7 @@
 import { betterAuth } from 'better-auth';
 import { config } from './config.js';
 import { pool } from './db.js';
+import { hashPassword, verifyPassword } from './password.js';
 
 export const auth = betterAuth({
   database: pool,
@@ -18,6 +19,8 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 15,
     maxPasswordLength: 128,
+    // Our own scrypt settings, stored in each hash (src/password.ts, D-031).
+    password: { hash: hashPassword, verify: verifyPassword },
   },
   telemetry: { enabled: false },
   advanced: {
