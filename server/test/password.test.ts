@@ -72,6 +72,7 @@ describe('verifyPassword with a malformed stored hash', () => {
     ['r of 0', `scrypt:32768:0:3:${SALT}:${KEY}`],
     ['r above the limit', `scrypt:32768:16:3:${SALT}:${KEY}`],
     ['p not digits', `scrypt:32768:8:x:${SALT}:${KEY}`],
+    ['p above the limit', `scrypt:32768:8:17:${SALT}:${KEY}`],
     ['a seventh part', `${VALID}:extra`],
     ['uppercase hex in the salt', `scrypt:32768:8:3:${'A'.repeat(32)}:${KEY}`],
     ['a key 2 characters short', `scrypt:32768:8:3:${SALT}:${'b'.repeat(126)}`],
