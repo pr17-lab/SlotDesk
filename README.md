@@ -43,7 +43,7 @@ A person who is not a member of an organization gets 404, the same answer as for
 
 ## Run it locally
 
-You need [Git](https://git-scm.com/), [Node.js](https://nodejs.org/) 24 (the repository pins the major version in `server/.nvmrc`) and [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any Docker with Compose).
+You need [Git](https://git-scm.com/), [Node.js](https://nodejs.org/) 24 (the repository pins the major version in `server/.nvmrc`) and [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any Docker with Compose). Start Docker Desktop before step 3.
 
 The commands below are for PowerShell on Windows. On macOS or Linux, use `cp` instead of `Copy-Item`; everything else is the same.
 
@@ -70,7 +70,9 @@ docker compose up -d
 docker compose ps
 ```
 
-Wait until `docker compose ps` shows `healthy` for `db`, and `0.0.0.0:5432->5432` under ports. The first start also creates a second database, `slotdesk_test`, for the tests.
+Right after `up -d` the status says `health: starting`. Run `docker compose ps` again every few seconds until it shows `healthy` for `db`, with `0.0.0.0:5432->5432` under ports. The first start downloads the PostgreSQL image, which can take a few minutes, and also creates a second database, `slotdesk_test`, for the tests.
+
+Docker Compose names the container and the data volume after the folder you cloned into (in lowercase). If you already have another copy of this project in a folder with the same name, the two copies share one database, and `docker compose down -v` in either one deletes it. Clone into a folder with a different name to keep them apart.
 
 **4. Install the dependencies.**
 
@@ -79,13 +81,15 @@ cd server
 npm ci
 ```
 
+`npm ci` may report moderate vulnerabilities. They are in development tools only; the production dependencies have none (CI checks this). Do not run `npm audit fix`, which would change the locked versions.
+
 **5. Set the auth secret.** The app refuses to start without one. Generate a secret:
 
 ```powershell
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-Open `server\.env` and paste the output after `BETTER_AUTH_SECRET=` (no spaces, no quotes). Never commit this file; git ignores it.
+Open `.env` in the `server` folder (the folder you are in now) and paste the output after `BETTER_AUTH_SECRET=` (no spaces, no quotes). Never commit this file; git ignores it.
 
 **6. Create the tables.**
 
@@ -99,13 +103,13 @@ npm run migrate:up
 npm run dev
 ```
 
-In a second terminal:
+Leave it running. In a second terminal (any folder):
 
 ```powershell
 curl.exe http://localhost:3000/api/health
 ```
 
-You should see `{"status":"ok"}`. (In PowerShell, use `curl.exe`, not `curl`, which is a different command.)
+You should see `{"status":"ok"}`. (In PowerShell, use `curl.exe`, not `curl`, which is a different command.) Stop the server with Ctrl+C in the first terminal.
 
 ### Run the checks
 
