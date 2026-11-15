@@ -25,6 +25,7 @@
     "helmet": "^8.3.0",
     "pg": "8.23.1",
     "pino": "^10.4.0",
+    "temporal-polyfill": "1.0.8",
     "zod": "4.6.7"
   },
   "devDependencies": {

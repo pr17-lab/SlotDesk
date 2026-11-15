@@ -12,6 +12,7 @@ import { requireMembership } from '../middleware/membership.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
 import { requireSession } from '../middleware/session.js';
 import { membersRouter } from './members.js';
+import { resourcesRouter } from './resources.js';
 
 const createOrgSchema = z.object({ name: z.string().trim().min(1).max(100) });
 
@@ -45,6 +46,7 @@ orgsRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
 const orgRouter = Router({ mergeParams: true });
 orgRouter.use(requireMembership);
 orgRouter.use('/members', membersRouter);
+orgRouter.use('/resources', resourcesRouter);
 
 orgRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   // The organization comes only from the membership check, never from
