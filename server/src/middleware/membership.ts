@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { isValidId } from '../ids.js';
 import { findMembershipRole } from '../data/memberships.js';
 import type { Role } from '../data/memberships.js';
 import { notFoundHandler } from './errors.js';
@@ -15,19 +16,6 @@ declare global {
   }
 }
 
-// Largest value a PostgreSQL bigint can hold.
-const MAX_BIGINT = 9223372036854775807n;
-
-// Digits only, no leading zero, and within bigint range, so a malformed ID
-// never reaches the database (where it would cause an error and a 500).
-function isValidOrgId(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[1-9][0-9]*$/.test(value) &&
-    BigInt(value) <= MAX_BIGINT
-  );
-}
-
 // A non-member gets the same 404 as an unknown route, so they cannot tell
 // whether the organization exists (D-030).
 export const requireMembership = async (
@@ -36,7 +24,7 @@ export const requireMembership = async (
   next: NextFunction,
 ): Promise<void> => {
   const orgId = req.params.orgId;
-  if (!isValidOrgId(orgId)) {
+  if (!isValidId(orgId)) {
     notFoundHandler(req, res);
     return;
   }

@@ -13,16 +13,17 @@ This is a work in progress. What exists and is tested today:
 
 - Sign-up, sign-in and sessions (email and password, using Better Auth).
 - Organizations and members, with an owner and staff role, and a tenant check on every organization route.
+- Resources (create, list, view, rename), with time zones checked.
 - The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections.
 - The API runs on a free Render instance with a Neon database.
 
-Not built yet: the booking routes, services and availability, and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+Not built yet: the booking routes, services, working hours and availability, and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live API:** `https://slotdesk-wfgi.onrender.com/api/health`. It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
 ## Tech stack
 
-Node 24, TypeScript (strict), Express 5, PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, pino, Vitest and Supertest, ESLint and Prettier, GitHub Actions.
+Node 24, TypeScript (strict), Express 5, PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, `temporal-polyfill` (time zone checks), pino, Vitest and Supertest, ESLint and Prettier, GitHub Actions.
 
 ## API
 
@@ -38,6 +39,10 @@ Every route is under `/api`. IDs are strings in JSON.
 | `GET /api/orgs/:orgId/members` | members | List members |
 | `POST /api/orgs/:orgId/members` | owner | Add an existing user by email as staff (201; 404 unknown email; 409 already a member) |
 | `DELETE /api/orgs/:orgId/members/:userId` | owner | Remove a staff member (204; 409 for the owner) |
+| `GET /api/orgs/:orgId/resources` | members | List the organization's resources |
+| `POST /api/orgs/:orgId/resources` | owner | Create a resource from `{ name, timeZone }` (201; 400 for a bad name or an invalid IANA time zone such as `Mars/Base` or `+05:30`) |
+| `GET /api/orgs/:orgId/resources/:resourceId` | members | `{ id, name, timeZone }` (404 if not found) |
+| `PATCH /api/orgs/:orgId/resources/:resourceId` | owner | Rename only. The time zone is fixed at creation, so a body with `timeZone` is a 400 (404 if not found) |
 
 A person who is not a member of an organization gets 404, the same answer as for an organization that does not exist. Requests that change data under `/api/orgs` must send an `Origin` header that matches `BETTER_AUTH_URL`.
 
@@ -154,10 +159,11 @@ server/
     app.ts, server.ts      the Express app, and the file that starts it
     auth.ts                Better Auth settings
     password.ts            password hashing (scrypt)
+    availability.ts        time zone checks (later: local time to UTC)
     config.ts              environment settings checked with Zod
     db.ts                  the PostgreSQL connection pool
     middleware/            origin, session, membership and role checks; errors
-    routes/                health, organizations, members
+    routes/                health, organizations, members, resources
     data/                  the SQL (one file per kind of data)
   migrations/              SQL migration files
   test/                    unit tests; test/db holds the database tests
