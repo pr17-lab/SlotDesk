@@ -51,7 +51,7 @@ SlotDesk uses one shared database schema for all organizations. Isolation is enf
 
 The weak point is stated plainly: composite foreign keys stop cross-tenant references, but they do not stop a query that forgets its `org_id` filter. Layers 3 and 5 exist for that reason. Row-level security was considered and left out of the first version.
 
-**Roles.** An organization has one owner and any number of staff. The database allows at most one owner per organization (a partial unique index). Only the owner can add or remove members, and create or rename resources; staff get 403 on those and can only read resources. An organization and its owner membership are created in one transaction.
+**Roles.** An organization has one owner and any number of staff. The database allows at most one owner per organization (a partial unique index). Only the owner can add or remove members, and create or rename resources; the owner also creates and updates services; staff get 403 on those and can only read resources and services. An organization and its owner membership are created in one transaction.
 
 **Origin check on our own routes.** Better Auth checks the `Origin` header on its own routes only. Requests that change data under `/api/orgs` need the same protection, so a small middleware requires the `Origin` header to equal the origin of `BETTER_AUTH_URL`, and answers 403 otherwise.
 
@@ -79,7 +79,7 @@ The constraint covers overlaps only. Working hours and similar rules will be app
 
 *Decisions D-014, D-021, D-025, D-026 and D-032.*
 
-**Tables.** `organizations`, `resources`, `bookings`, `memberships`, and four identity tables (`users`, `sessions`, `accounts`, `verifications`). Migrations are plain SQL files in `server/migrations/`, each with a real down step.
+**Tables.** `organizations`, `resources`, `services`, `bookings`, `memberships`, and four identity tables (`users`, `sessions`, `accounts`, `verifications`). Migrations are plain SQL files in `server/migrations/`, each with a real down step.
 
 **Keys and names.**
 
@@ -95,6 +95,8 @@ The constraint covers overlaps only. Working hours and similar rules will be app
 **Database access.** The app uses `pg` with hand-written, parameterized SQL and no ORM, because exclusion constraints cannot be written in the schema language of Prisma, the ORM that was considered. One rule came out of testing lost connections: a client taken from the pool with `pool.connect()` gets its own `'error'` listener while it is checked out and is released in a `finally` block. Without that, a dropped connection stops the whole Node process. Tests kill real connections to prove it.
 
 **Resource time zones.** A resource's `time_zone` is an IANA name, checked and normalised with `temporal-polyfill` when the resource is created (for example `asia/kolkata` is stored as `Asia/Kolkata`). It is fixed afterwards, because changing it would move every working-hours window while bookings stay as UTC instants. Offsets such as `+05:30` are refused. The check does not use `Intl.supportedValuesOf`, which lacks `Asia/Kolkata` on Node 24 (D-032).
+
+**Services.** A service has a name and a duration of 5 to 480 minutes in steps of 5, checked by the API and by a database `CHECK`. Every resource offers every service for now, so there is no table linking them (D-032).
 
 ## 5. Authentication
 
@@ -134,7 +136,7 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 | Command | What it covers |
 |---|---|
 | `npm test` | Unit tests. No database needed. |
-| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member and resource routes through the real app. |
+| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource and service routes through the real app. |
 
 The database tests commit for real, create their own data, and run one file at a time. A guard refuses to run unless the database name ends in `_test`, and the guard has its own test.
 
@@ -152,5 +154,6 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 - Our own routes have no rate limit and list endpoints have no pagination. Both are marked in the code as shortcuts.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
-- Booking routes, services, working hours, availability and the React client do not exist yet.
+- Booking routes, working hours, availability and the React client do not exist yet.
+- Every resource offers every service; there is no way to say a resource does not perform one. Services cannot be deleted.
 - The time zone of a resource cannot be changed after creation.
