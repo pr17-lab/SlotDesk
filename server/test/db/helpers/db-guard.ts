@@ -88,13 +88,14 @@ export async function expectError(
 
 // Truncate tenant tables after each test file so the next file starts clean.
 // Restart identity sequences so IDs are predictable within a file.
-// Order: memberships first (references organizations and users), then
-// bookings (references resources), then services (references organizations),
-// then resources (references organizations), then organizations. The Better
-// Auth identity tables are cleaned after the tenant tables.
+// Order: working_hours first (references resources), then memberships
+// (references organizations and users), then bookings (references
+// resources), then services (references organizations), then resources
+// (references organizations), then organizations. The Better Auth identity
+// tables are cleaned after the tenant tables.
 export async function truncateTables(client: pg.Client): Promise<void> {
   await client.query(
-    'TRUNCATE memberships, bookings, services, resources, organizations RESTART IDENTITY CASCADE',
+    'TRUNCATE working_hours, memberships, bookings, services, resources, organizations RESTART IDENTITY CASCADE',
   );
   await client.query(
     'TRUNCATE verifications, accounts, sessions, users RESTART IDENTITY CASCADE',
