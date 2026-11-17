@@ -100,6 +100,8 @@ The constraint covers overlaps only. Working hours and similar rules will be app
 
 **Working hours.** Each resource has weekly windows stored as minutes since local midnight in its own time zone. A database exclusion constraint refuses overlapping windows on the same day (touching ones are allowed), and a `CHECK` keeps minutes between 0 and 1440. Saving replaces the whole week in one transaction that first locks the resource row, so two saves at once cannot interleave (D-032).
 
+**Availability.** One pure function in `src/availability.ts` turns a resource's working hours into UTC start times every 15 minutes where the service fits, leaving out the past and anything that overlaps a confirmed booking. It is given the current time instead of reading the clock, so tests control it. Wall-clock times that do not exist or happen twice on DST days are converted with Temporal's `compatible` rule (a missing time moves later, a repeated time takes the earlier instant), and slots step in real minutes, so a window that spans a clock change is as long as the time that really passes. Unit tests cover New York's two changes and India. The result is a hint: the booking constraint decides (D-032).
+
 ## 5. Authentication
 
 *Decisions D-001, D-029 and D-031.*
@@ -137,8 +139,8 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 
 | Command | What it covers |
 |---|---|
-| `npm test` | Unit tests. No database needed. |
-| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource, service and working-hours routes through the real app. |
+| `npm test` | Unit tests, including the availability and daylight saving time cases. No database needed. |
+| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource, service, working-hours and availability routes through the real app. |
 
 The database tests commit for real, create their own data, and run one file at a time. A guard refuses to run unless the database name ends in `_test`, and the guard has its own test.
 
@@ -156,7 +158,8 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 - Our own routes have no rate limit and list endpoints have no pagination. Both are marked in the code as shortcuts.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
-- Booking routes, availability and the React client do not exist yet.
+- Booking routes and the React client do not exist yet.
+- Availability is members-only for now, and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered.
 - Working hours cannot run past midnight, and there are no holidays, time off or buffers between bookings.
 - Every resource offers every service; there is no way to say a resource does not perform one. Services cannot be deleted.
 - The time zone of a resource cannot be changed after creation.
