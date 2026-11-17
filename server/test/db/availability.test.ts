@@ -18,8 +18,9 @@ const TRUSTED_ORIGIN = 'http://localhost:3000';
 // 15+ characters, the minimum set in src/auth.ts. Never printed.
 const PASSWORD = 'availability-pw-15chars';
 const UNKNOWN = '999999';
-// 2030-01-07 is a Monday, far enough ahead that "now" never interferes.
-const MONDAY = '2030-01-07';
+// 2099-01-05 is a Monday, far enough ahead that "now" does not interfere,
+// and still inside the API's 2000 to 2099 limit.
+const MONDAY = '2099-01-05';
 
 const { app, pool } = await loadAppOnTestDatabase();
 const { createClient } = requireTestDatabase();
@@ -154,9 +155,9 @@ const get = (
   );
 
 const THREE_SLOTS = [
-  { startsAt: '2030-01-07T03:30:00Z', endsAt: '2030-01-07T04:00:00Z' },
-  { startsAt: '2030-01-07T03:45:00Z', endsAt: '2030-01-07T04:15:00Z' },
-  { startsAt: '2030-01-07T04:00:00Z', endsAt: '2030-01-07T04:30:00Z' },
+  { startsAt: '2099-01-05T03:30:00Z', endsAt: '2099-01-05T04:00:00Z' },
+  { startsAt: '2099-01-05T03:45:00Z', endsAt: '2099-01-05T04:15:00Z' },
+  { startsAt: '2099-01-05T04:00:00Z', endsAt: '2099-01-05T04:30:00Z' },
 ];
 
 const starts = (res: request.Response) =>
@@ -225,7 +226,7 @@ describe('slots', () => {
   });
 
   it('returns the same three slots over a whole week', async () => {
-    const res = await get(alice.cookie, orgA, main, { to: '2030-01-13' });
+    const res = await get(alice.cookie, orgA, main, { to: '2099-01-11' });
     expect(res.status).toBe(200);
     expect(res.body.slots).toEqual(THREE_SLOTS);
   });
@@ -259,15 +260,15 @@ describe('bookings', () => {
     await insertBooking(
       orgA,
       main,
-      '2030-01-07T03:30:00Z',
-      '2030-01-07T03:45:00Z',
+      '2099-01-05T03:30:00Z',
+      '2099-01-05T03:45:00Z',
       'confirmed',
     );
     const res = await get(alice.cookie, orgA, main);
     expect(res.status).toBe(200);
     expect(starts(res)).toEqual([
-      '2030-01-07T03:45:00Z',
-      '2030-01-07T04:00:00Z',
+      '2099-01-05T03:45:00Z',
+      '2099-01-05T04:00:00Z',
     ]);
   });
 
@@ -275,8 +276,8 @@ describe('bookings', () => {
     await insertBooking(
       orgA,
       main,
-      '2030-01-07T03:30:00Z',
-      '2030-01-07T04:30:00Z',
+      '2099-01-05T03:30:00Z',
+      '2099-01-05T04:30:00Z',
       'cancelled',
     );
     const res = await get(alice.cookie, orgA, main);
@@ -288,8 +289,8 @@ describe('bookings', () => {
     await insertBooking(
       orgA,
       empty,
-      '2030-01-07T03:30:00Z',
-      '2030-01-07T04:30:00Z',
+      '2099-01-05T03:30:00Z',
+      '2099-01-05T04:30:00Z',
       'confirmed',
     );
     const res = await get(alice.cookie, orgA, main);
@@ -297,23 +298,23 @@ describe('bookings', () => {
     expect(res.body.slots).toEqual(THREE_SLOTS);
   });
 
-  // Local 00:00 to 01:00 on Monday 2030-01-07 is 2030-01-06T18:30Z to 19:30Z.
-  // The booking ends before UTC midnight of 2030-01-07, so a search range
+  // Local 00:00 to 01:00 on Monday 2099-01-05 is 2099-01-04T18:30Z to 19:30Z.
+  // The booking ends before UTC midnight of 2099-01-05, so a search range
   // that started at the requested date in UTC would miss it and offer 18:30Z
   // too.
   it('finds a booking on the UTC day before the requested local date', async () => {
     await insertBooking(
       orgA,
       midnight,
-      '2030-01-06T18:00:00Z',
-      '2030-01-06T18:45:00Z',
+      '2099-01-04T18:00:00Z',
+      '2099-01-04T18:45:00Z',
       'confirmed',
     );
     const res = await get(alice.cookie, orgA, midnight);
     expect(res.status).toBe(200);
     expect(starts(res)).toEqual([
-      '2030-01-06T18:45:00Z',
-      '2030-01-06T19:00:00Z',
+      '2099-01-04T18:45:00Z',
+      '2099-01-04T19:00:00Z',
     ]);
   });
 });
@@ -340,13 +341,13 @@ describe('validation (400)', () => {
     ],
     [
       'from after to',
-      () => `serviceId=${serviceA}&from=2030-01-08&to=${MONDAY}`,
+      () => `serviceId=${serviceA}&from=2099-01-06&to=${MONDAY}`,
       'to',
       'from must not be after to',
     ],
     [
       '15 days',
-      () => `serviceId=${serviceA}&from=${MONDAY}&to=2030-01-21`,
+      () => `serviceId=${serviceA}&from=${MONDAY}&to=2099-01-19`,
       'to',
       'The range must be at most 14 days',
     ],
@@ -391,7 +392,7 @@ describe('limits accepted (200)', () => {
   // The edge dates prove the booking search range reaches PostgreSQL
   // without an error.
   it.each([
-    ['exactly 14 days', MONDAY, '2030-01-20'],
+    ['exactly 14 days', MONDAY, '2099-01-18'],
     ['the first allowed date', '2000-01-01', '2000-01-01'],
     ['the last allowed date', '2099-12-31', '2099-12-31'],
   ])('accepts %s', async (_label, from, to) => {

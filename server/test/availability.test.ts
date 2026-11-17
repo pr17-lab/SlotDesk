@@ -1,4 +1,4 @@
-// Step 9a: the time zone check. Unit tests, no database.
+// Steps 9a and 9d: the time zone check, local time to UTC, and free slots. Unit tests, no database.
 import { describe, expect, it } from 'vitest';
 import { Temporal } from 'temporal-polyfill';
 import {

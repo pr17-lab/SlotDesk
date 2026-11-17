@@ -125,4 +125,5 @@ resourcesRouter.patch(
 );
 
 resourcesRouter.use('/:resourceId/working-hours', workingHoursRouter);
+// availabilityRouter uses mergeParams so it can read :resourceId from this path (see routes/availability.ts).
 resourcesRouter.use('/:resourceId/availability', availabilityRouter);
