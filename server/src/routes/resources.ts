@@ -11,6 +11,7 @@ import {
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireOwner } from '../middleware/role.js';
+import { workingHoursRouter } from './working-hours.js';
 
 const nameSchema = z.string().trim().min(1).max(100);
 
@@ -121,3 +122,5 @@ resourcesRouter.patch(
     res.status(200).json(resource);
   },
 );
+
+resourcesRouter.use('/:resourceId/working-hours', workingHoursRouter);
