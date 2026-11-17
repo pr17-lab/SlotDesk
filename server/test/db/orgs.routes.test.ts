@@ -6,10 +6,13 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  createOrg,
+  createUser,
   loadAppOnTestDatabase,
+  observed,
   signIn,
-  signUp,
   tokenFromSessionCookie,
+  type TestUser,
 } from './helpers/auth-app.js';
 import {
   connectAndVerify,
@@ -27,30 +30,9 @@ const { createClient } = requireTestDatabase();
 
 let client: pg.Client;
 
-type TestUser = { id: string; email: string; cookie: string };
 let alice: TestUser;
 let bob: TestUser;
 let carol: TestUser;
-
-// Signs a user up and returns the session cookie from the sign-up response.
-async function createUser(email: string, name: string): Promise<TestUser> {
-  const cookie = await signUp(app, { email, password: PASSWORD, name });
-  const row = await client.query<{ id: string }>(
-    'SELECT id FROM users WHERE email = $1',
-    [email],
-  );
-  return { id: row.rows[0]!.id, email, cookie };
-}
-
-async function createOrg(cookie: string, name: string): Promise<string> {
-  const res = await request(app)
-    .post('/api/orgs')
-    .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie)
-    .send({ name });
-  expect(res.status).toBe(201);
-  return res.body.id as string;
-}
 
 async function countOrganizations(): Promise<number> {
   const result = await client.query<{ count: number }>(
@@ -70,9 +52,21 @@ async function sessionExpiresAt(token: string): Promise<Date | undefined> {
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await createUser('org-alice@example.com', 'Alice');
-  bob = await createUser('org-bob@example.com', 'Bob');
-  carol = await createUser('org-carol@example.com', 'Carol');
+  alice = await createUser(app, client, {
+    email: 'org-alice@example.com',
+    password: PASSWORD,
+    name: 'Alice',
+  });
+  bob = await createUser(app, client, {
+    email: 'org-bob@example.com',
+    password: PASSWORD,
+    name: 'Bob',
+  });
+  carol = await createUser(app, client, {
+    email: 'org-carol@example.com',
+    password: PASSWORD,
+    name: 'Carol',
+  });
 });
 
 afterAll(async () => {
@@ -83,7 +77,7 @@ afterAll(async () => {
 
 describe('401: the session check', () => {
   it('returns 401 without a cookie on create, list and view', async () => {
-    const orgId = await createOrg(alice.cookie, 'Alice 401 Org');
+    const orgId = await createOrg(app, alice.cookie, 'Alice 401 Org');
 
     const create = await request(app)
       .post('/api/orgs')
@@ -253,7 +247,7 @@ describe('create, list and view', () => {
   });
 
   it('views one organization with the caller role', async () => {
-    const orgId = await createOrg(alice.cookie, 'Alice View Org');
+    const orgId = await createOrg(app, alice.cookie, 'Alice View Org');
     const res = await request(app)
       .get(`/api/orgs/${orgId}`)
       .set('Cookie', alice.cookie);
@@ -266,7 +260,7 @@ describe('create, list and view', () => {
   });
 
   it('shows role staff to a staff member in list and view', async () => {
-    const orgId = await createOrg(alice.cookie, 'Alice Staffed Org');
+    const orgId = await createOrg(app, alice.cookie, 'Alice Staffed Org');
     await client.query(
       "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
       [orgId, bob.id],
@@ -297,18 +291,9 @@ describe('isolation', () => {
   let orgB: string;
 
   beforeAll(async () => {
-    orgA = await createOrg(alice.cookie, 'Isolation Org A');
-    orgB = await createOrg(bob.cookie, 'Isolation Org B');
+    orgA = await createOrg(app, alice.cookie, 'Isolation Org A');
+    orgB = await createOrg(app, bob.cookie, 'Isolation Org B');
   });
-
-  // Status, body and content-type: what a caller can observe.
-  function observed(res: request.Response) {
-    return {
-      status: res.status,
-      body: res.body as unknown,
-      contentType: res.get('content-type'),
-    };
-  }
 
   it("gives Bob the same 404 on Alice's organization as on an unknown route and on every malformed ID", async () => {
     const onA = observed(

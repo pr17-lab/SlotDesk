@@ -5,7 +5,13 @@
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';
+import {
+  createOrg,
+  createUser,
+  loadAppOnTestDatabase,
+  observed,
+  type TestUser,
+} from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -23,7 +29,6 @@ const { createClient } = requireTestDatabase();
 
 let client: pg.Client;
 
-type TestUser = { id: string; cookie: string };
 let alice: TestUser; // owner of org A
 let bob: TestUser; // staff of org A
 let carol: TestUser; // in no organization
@@ -32,37 +37,6 @@ let orgA: string;
 let orgB: string;
 let serviceA: string; // a service of org A
 let serviceB: string; // a service of org B
-
-// These small helpers now exist in three files (members.test.ts,
-// resources.test.ts and this one): createUser, createOrg and observed. Not
-// shared, because existing test files are not refactored.
-async function createUser(email: string, name: string): Promise<TestUser> {
-  const cookie = await signUp(app, { email, password: PASSWORD, name });
-  const row = await client.query<{ id: string }>(
-    'SELECT id FROM users WHERE email = $1',
-    [email],
-  );
-  return { id: row.rows[0]!.id, cookie };
-}
-
-async function createOrg(cookie: string, name: string): Promise<string> {
-  const res = await request(app)
-    .post('/api/orgs')
-    .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie)
-    .send({ name });
-  expect(res.status).toBe(201);
-  return res.body.id as string;
-}
-
-// Status, body and content-type: what a caller can observe.
-function observed(res: request.Response) {
-  return {
-    status: res.status,
-    body: res.body as unknown,
-    contentType: res.get('content-type'),
-  };
-}
 
 type Row = {
   id: string;
@@ -105,12 +79,28 @@ const view = (cookie: string, orgId: string, serviceId: string) =>
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await createUser('svc-alice@example.com', 'Alice');
-  bob = await createUser('svc-bob@example.com', 'Bob');
-  carol = await createUser('svc-carol@example.com', 'Carol');
-  dave = await createUser('svc-dave@example.com', 'Dave');
-  orgA = await createOrg(alice.cookie, 'Services Org A');
-  orgB = await createOrg(dave.cookie, 'Services Org B');
+  alice = await createUser(app, client, {
+    email: 'svc-alice@example.com',
+    password: PASSWORD,
+    name: 'Alice',
+  });
+  bob = await createUser(app, client, {
+    email: 'svc-bob@example.com',
+    password: PASSWORD,
+    name: 'Bob',
+  });
+  carol = await createUser(app, client, {
+    email: 'svc-carol@example.com',
+    password: PASSWORD,
+    name: 'Carol',
+  });
+  dave = await createUser(app, client, {
+    email: 'svc-dave@example.com',
+    password: PASSWORD,
+    name: 'Dave',
+  });
+  orgA = await createOrg(app, alice.cookie, 'Services Org A');
+  orgB = await createOrg(app, dave.cookie, 'Services Org B');
   await client.query(
     "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
     [orgA, bob.id],

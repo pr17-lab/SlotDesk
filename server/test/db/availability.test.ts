@@ -7,7 +7,13 @@
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';
+import {
+  createOrg,
+  createUser,
+  loadAppOnTestDatabase,
+  observed,
+  type TestUser,
+} from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -27,7 +33,6 @@ const { createClient } = requireTestDatabase();
 
 let client: pg.Client;
 
-type TestUser = { id: string; cookie: string };
 let alice: TestUser; // owner of org A
 let bob: TestUser; // staff of org A
 let carol: TestUser; // in no organization
@@ -40,29 +45,6 @@ let midnight: string; // org A, Monday 00:00 to 01:00
 let serviceA: string; // org A, 30 minutes
 let resourceB: string; // org B, Monday 09:00 to 10:00
 let serviceB: string; // org B, 30 minutes
-
-// These small helpers now exist in five files (members.test.ts,
-// resources.test.ts, services.test.ts, working-hours.test.ts and this one):
-// createUser, createOrg and observed. Not shared, because existing test files
-// are not refactored.
-async function createUser(email: string, name: string): Promise<TestUser> {
-  const cookie = await signUp(app, { email, password: PASSWORD, name });
-  const row = await client.query<{ id: string }>(
-    'SELECT id FROM users WHERE email = $1',
-    [email],
-  );
-  return { id: row.rows[0]!.id, cookie };
-}
-
-async function createOrg(cookie: string, name: string): Promise<string> {
-  const res = await request(app)
-    .post('/api/orgs')
-    .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie)
-    .send({ name });
-  expect(res.status).toBe(201);
-  return res.body.id as string;
-}
 
 // An India resource (Asia/Kolkata, +05:30, no DST) with the given Monday
 // window, or no hours when window is null.
@@ -115,15 +97,6 @@ async function insertBooking(
   );
 }
 
-// Status, body and content-type: what a caller can observe.
-function observed(res: request.Response) {
-  return {
-    status: res.status,
-    body: res.body as unknown,
-    contentType: res.get('content-type'),
-  };
-}
-
 // A GET with a raw query string, so a case can repeat a key (from=a&from=b).
 const getRaw = (
   cookie: string,
@@ -166,12 +139,28 @@ const starts = (res: request.Response) =>
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await createUser('av-alice@example.com', 'Alice');
-  bob = await createUser('av-bob@example.com', 'Bob');
-  carol = await createUser('av-carol@example.com', 'Carol');
-  dave = await createUser('av-dave@example.com', 'Dave');
-  orgA = await createOrg(alice.cookie, 'Availability Org A');
-  orgB = await createOrg(dave.cookie, 'Availability Org B');
+  alice = await createUser(app, client, {
+    email: 'av-alice@example.com',
+    password: PASSWORD,
+    name: 'Alice',
+  });
+  bob = await createUser(app, client, {
+    email: 'av-bob@example.com',
+    password: PASSWORD,
+    name: 'Bob',
+  });
+  carol = await createUser(app, client, {
+    email: 'av-carol@example.com',
+    password: PASSWORD,
+    name: 'Carol',
+  });
+  dave = await createUser(app, client, {
+    email: 'av-dave@example.com',
+    password: PASSWORD,
+    name: 'Dave',
+  });
+  orgA = await createOrg(app, alice.cookie, 'Availability Org A');
+  orgB = await createOrg(app, dave.cookie, 'Availability Org B');
   await client.query(
     "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
     [orgA, bob.id],

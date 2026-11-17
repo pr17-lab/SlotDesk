@@ -93,6 +93,52 @@ export async function signIn(
   return cookie!;
 }
 
+export type TestUser = {
+  id: string;
+  name: string;
+  email: string;
+  cookie: string;
+};
+
+// Signs a user up through the real app and looks up the new user's id.
+export async function createUser(
+  app: Express,
+  client: pg.Client,
+  user: { email: string; password: string; name: string },
+): Promise<TestUser> {
+  const cookie = await signUp(app, user);
+  const row = await client.query<{ id: string }>(
+    'SELECT id FROM users WHERE email = $1',
+    [user.email],
+  );
+  return { id: row.rows[0]!.id, name: user.name, email: user.email, cookie };
+}
+
+// Creates an organization as the signed-in user and returns its id.
+export async function createOrg(
+  app: Express,
+  cookie: string,
+  name: string,
+): Promise<string> {
+  const res = await request(app)
+    .post('/api/orgs')
+    .set('Origin', TRUSTED_ORIGIN)
+    .set('Cookie', cookie)
+    .send({ name });
+  expect(res.status).toBe(201);
+  return res.body.id as string;
+}
+
+// Status, body and content type: what a caller can observe. Isolation tests
+// compare these to show that two 404s cannot be told apart.
+export function observed(res: request.Response) {
+  return {
+    status: res.status,
+    body: res.body as unknown,
+    contentType: res.get('content-type'),
+  };
+}
+
 // Extracts the raw token from a session cookie's "name=value" part. The
 // value is URL-encoded `<token>.<signature>` (confirmed against the
 // installed better-call cookie signing code, which also splits on the last
