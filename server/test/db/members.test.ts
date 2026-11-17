@@ -5,7 +5,13 @@
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';
+import {
+  createOrg,
+  createUser,
+  loadAppOnTestDatabase,
+  observed,
+  type TestUser,
+} from './helpers/auth-app.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -22,7 +28,6 @@ const { createClient } = requireTestDatabase();
 
 let client: pg.Client;
 
-type TestUser = { id: string; name: string; email: string; cookie: string };
 let alice: TestUser;
 let bob: TestUser;
 let carol: TestUser;
@@ -30,26 +35,6 @@ let dave: TestUser;
 let erin: TestUser;
 let orgA: string;
 let orgB: string;
-
-// Signs a user up and returns the session cookie from the sign-up response.
-async function createUser(email: string, name: string): Promise<TestUser> {
-  const cookie = await signUp(app, { email, password: PASSWORD, name });
-  const row = await client.query<{ id: string }>(
-    'SELECT id FROM users WHERE email = $1',
-    [email],
-  );
-  return { id: row.rows[0]!.id, name, email, cookie };
-}
-
-async function createOrg(cookie: string, name: string): Promise<string> {
-  const res = await request(app)
-    .post('/api/orgs')
-    .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie)
-    .send({ name });
-  expect(res.status).toBe(201);
-  return res.body.id as string;
-}
 
 async function countMemberships(orgId: string): Promise<number> {
   const result = await client.query<{ count: number }>(
@@ -85,25 +70,36 @@ const removeMember = (cookie: string, orgId: string, userId: string) =>
 const listMembers = (cookie: string, orgId: string) =>
   request(app).get(`/api/orgs/${orgId}/members`).set('Cookie', cookie);
 
-// Status, body and content-type: what a caller can observe.
-function observed(res: request.Response) {
-  return {
-    status: res.status,
-    body: res.body as unknown,
-    contentType: res.get('content-type'),
-  };
-}
-
 beforeAll(async () => {
   client = createClient();
   await connectAndVerify(client);
-  alice = await createUser('org-alice@example.com', 'Alice');
-  bob = await createUser('org-bob@example.com', 'Bob');
-  carol = await createUser('org-carol@example.com', 'Carol');
-  dave = await createUser('org-dave@example.com', 'Dave');
-  erin = await createUser('org-erin@example.com', 'Erin');
-  orgA = await createOrg(alice.cookie, 'Members Org A');
-  orgB = await createOrg(dave.cookie, 'Members Org B');
+  alice = await createUser(app, client, {
+    email: 'org-alice@example.com',
+    password: PASSWORD,
+    name: 'Alice',
+  });
+  bob = await createUser(app, client, {
+    email: 'org-bob@example.com',
+    password: PASSWORD,
+    name: 'Bob',
+  });
+  carol = await createUser(app, client, {
+    email: 'org-carol@example.com',
+    password: PASSWORD,
+    name: 'Carol',
+  });
+  dave = await createUser(app, client, {
+    email: 'org-dave@example.com',
+    password: PASSWORD,
+    name: 'Dave',
+  });
+  erin = await createUser(app, client, {
+    email: 'org-erin@example.com',
+    password: PASSWORD,
+    name: 'Erin',
+  });
+  orgA = await createOrg(app, alice.cookie, 'Members Org A');
+  orgB = await createOrg(app, dave.cookie, 'Members Org B');
   await client.query(
     "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
     [orgB, erin.id],

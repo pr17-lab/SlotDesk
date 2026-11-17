@@ -11,6 +11,7 @@ import { config } from './config.js';
 import { pool } from './db.js';
 import { hashPassword, verifyPassword } from './password.js';
 
+// shortcut: Better Auth's rate limit uses its defaults (kept in memory, on only in production, reset on every restart), move it to database storage if a second instance appears or restarts start resetting limits under attack (D-029 C)
 export const auth = betterAuth({
   database: pool,
   secret: config.authSecret,

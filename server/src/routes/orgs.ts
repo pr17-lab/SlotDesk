@@ -1,4 +1,4 @@
-// shortcut: no rate limit on /api/orgs (Better Auth limits only /api/auth), review at Step 7
+// shortcut: no rate limit on /api/orgs (Better Auth limits only /api/auth); every route here needs a session and membership, so it stays until Week 3 (D-031), and must be added before any route works without sign-in (guest booking, public availability)
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
