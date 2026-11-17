@@ -11,6 +11,7 @@ import {
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireOwner } from '../middleware/role.js';
+import { availabilityRouter } from './availability.js';
 import { workingHoursRouter } from './working-hours.js';
 
 const nameSchema = z.string().trim().min(1).max(100);
@@ -124,3 +125,5 @@ resourcesRouter.patch(
 );
 
 resourcesRouter.use('/:resourceId/working-hours', workingHoursRouter);
+// availabilityRouter uses mergeParams so it can read :resourceId from this path (see routes/availability.ts).
+resourcesRouter.use('/:resourceId/availability', availabilityRouter);
