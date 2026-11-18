@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 
 // All numbers: pg returns smallint (weekday) and integer (the minutes)
 // columns as JavaScript numbers. Only bigint columns come back as strings.
@@ -39,17 +39,7 @@ export async function replaceWorkingHours(
   resourceId: string,
   windows: WorkingWindow[],
 ): Promise<WorkingWindow[] | null> {
-  const client = await pool.connect();
-  let discardClient = false;
-  // A checked-out client has no 'error' listener (pg-pool removes its own
-  // while the client is out), and pg emits 'error' when the connection drops.
-  // Without this listener that event would crash the whole process.
-  const onError = (): void => {
-    discardClient = true;
-  };
-  client.on('error', onError);
-  try {
-    await client.query('BEGIN');
+  return withTransaction(async (client) => {
     // Lock the resource row first. Without the lock, two PUTs for the same
     // resource at the same moment would both delete and both insert, and one
     // would fail on working_hours_no_overlap (a 500). With it, the second
@@ -64,7 +54,7 @@ export async function replaceWorkingHours(
       [orgId, resourceId],
     );
     if (resource.rowCount === 0) {
-      await client.query('ROLLBACK');
+      // Nothing was written, so committing this transaction changes nothing.
       return null;
     }
     await client.query(
@@ -92,19 +82,6 @@ export async function replaceWorkingHours(
       orgId,
       resourceId,
     ]);
-    await client.query('COMMIT');
     return stored.rows;
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      discardClient = true;
-    }
-    throw error;
-  } finally {
-    client.removeListener('error', onError);
-    // A truthy value makes pg-pool destroy the client instead of reusing a
-    // connection whose transaction state is unknown.
-    client.release(discardClient);
-  }
+  });
 }

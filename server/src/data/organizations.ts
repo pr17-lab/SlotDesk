@@ -1,4 +1,4 @@
-import { pool } from '../db.js';
+import { pool, withTransaction } from '../db.js';
 import type { Role } from './memberships.js';
 
 // IDs stay strings: pg returns bigint as a string, and a JavaScript number
@@ -11,17 +11,7 @@ export async function createOrganizationWithOwner(
   userId: string,
   name: string,
 ): Promise<OrgWithRole> {
-  const client = await pool.connect();
-  let discardClient = false;
-  // A checked-out client has no 'error' listener (pg-pool removes its own
-  // while the client is out), and pg emits 'error' when the connection drops.
-  // Without this listener that event would crash the whole process.
-  const onError = (): void => {
-    discardClient = true;
-  };
-  client.on('error', onError);
-  try {
-    await client.query('BEGIN');
+  return withTransaction(async (client) => {
     const result = await client.query<{ id: string; name: string }>(
       'INSERT INTO organizations (name) VALUES ($1) RETURNING id, name',
       [name],
@@ -31,21 +21,8 @@ export async function createOrganizationWithOwner(
       "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'owner')",
       [org.id, userId],
     );
-    await client.query('COMMIT');
     return { id: org.id, name: org.name, role: 'owner' };
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      discardClient = true;
-    }
-    throw error;
-  } finally {
-    client.removeListener('error', onError);
-    // A truthy value makes pg-pool destroy the client instead of reusing a
-    // connection whose transaction state is unknown.
-    client.release(discardClient);
-  }
+  });
 }
 
 export async function listOrganizationsForUser(
