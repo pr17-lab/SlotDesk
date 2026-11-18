@@ -85,6 +85,25 @@ export const errorHandler = (
     }
   }
 
+  // An unlisted database code is a 500. Log only the fields that name the
+  // rule and the place, never the whole error: its detail holds the rejected
+  // row, and its message (and so the first line of its stack) can hold a value,
+  // for example `invalid input syntax for type bigint: "abc"`.
+  if (err instanceof pg.DatabaseError) {
+    logger.error(
+      {
+        code: err.code,
+        constraint: err.constraint,
+        table: err.table,
+        column: err.column,
+        routine: err.routine,
+      },
+      'Unhandled database error',
+    );
+    res.status(500).json({ error: 'Internal server error' });
+    return;
+  }
+
   // Log unexpected errors with the error object; never expose message or stack in the response.
   logger.error({ err }, 'Unhandled error');
 

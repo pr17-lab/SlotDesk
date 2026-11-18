@@ -172,18 +172,36 @@ describe('Database error mapping', () => {
     expect(mapped.get('content-type')).toBe(unknown.get('content-type'));
   });
 
-  it('keeps an unlisted database code a logged 500', async () => {
+  it('keeps an unlisted database code a logged 500, without the rejected values', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    // 22P02 (invalid text representation) is not in the mapping.
-    const res = await request(appThrowing(databaseError('22P02'))).get(
-      '/throw',
-    );
+    // 22P02 (invalid text representation) is not in the mapping. PostgreSQL
+    // puts values in both the message and the detail of such an error.
+    const err = databaseError('22P02');
+    err.message = 'invalid input syntax for type bigint: "secret-value"';
+    err.column = 'some_column';
+    err.routine = 'some_routine';
+    const res = await request(appThrowing(err)).get('/throw');
 
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'Internal server error' });
     expect(errorSpy).toHaveBeenCalledOnce();
+    expect(errorSpy.mock.calls[0]).toEqual([
+      {
+        code: '22P02',
+        constraint: 'some_constraint',
+        table: 'some_table',
+        column: 'some_column',
+        routine: 'some_routine',
+      },
+      'Unhandled database error',
+    ]);
+    // Neither the detail value nor the message value may reach the log.
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+      'secret@example.com',
+    );
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('secret-value');
     expect(warnSpy).not.toHaveBeenCalled();
 
     warnSpy.mockRestore();
