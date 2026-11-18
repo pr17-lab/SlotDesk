@@ -113,10 +113,12 @@ jobs:
           node-version-file: server/.nvmrc
 
       - name: Audit production dependencies (any severity)
-        run: npm audit --omit=dev
+        # Advisories listed in server/audit-exceptions.json, each with a
+        # reason and an expiry date, are skipped (D-027).
+        run: node scripts/audit-check.ts production
 
       - name: Audit all dependencies (high or critical)
         # Run even when the previous audit step fails so both reports are
         # always visible in the same run.
         if: ${{ !cancelled() }}
-        run: npm audit --audit-level=high
+        run: node scripts/audit-check.ts all

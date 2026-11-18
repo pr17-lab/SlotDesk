@@ -71,7 +71,7 @@ So the guarantee lives in the database. The `bookings` table has an exclusion co
 
 The planned booking transaction is: begin, lock the resource row (scoped to the organization), validate, insert, commit. The constraint decides who wins. The lock does not provide correctness: it makes losers fail quickly and cleanly. In a test without it, the first failing round had 29 of 30 simultaneous attempts fail with deadlocks (error `40P01`) instead of a clean rejection.
 
-What is built: the tables, the constraint, tests that prove it (section 7), and the mapping of database errors to HTTP responses: an overlap or a duplicate is 409, a bad reference is 404 (the same answer as a missing row), a bad value is 400, and a deadlock or serialization failure is 503 with `Retry-After: 1`. Deadlocks are not retried automatically: with the resource row locked first none are expected, so retry code would only hide a new locking bug. The mapped errors are logged with the error code and constraint name only, never the rejected values. What is not built yet: the booking routes themselves. Those are next.
+What is built: the tables, the constraint, tests that prove it (section 7), and the mapping of database errors to HTTP responses: an overlap or a duplicate is 409, a bad reference is 404 (the same answer as a missing row), a bad value is 400, and a deadlock or serialization failure is 503 with `Retry-After: 1`. Deadlocks are not retried automatically: with the resource row locked first none are expected, so retry code would only hide a new locking bug. The mapped errors are logged with the error code, constraint name and table name only, never the rejected values. What is not built yet: the booking routes themselves. Those are next.
 
 The constraint covers overlaps only. Working hours and similar rules will be application rules, so code that bypasses the API could break them. That limit is accepted.
 
@@ -150,7 +150,7 @@ The booking concurrency tests have three layers, two of which are built:
 2. **HTTP race** (planned, with the booking routes).
 3. **Mutation proof.** The same harness runs against a scratch schema with no constraint and a check-then-insert. It must produce more than one winner in some round, and fails otherwise. This proves the race harness can detect a double booking, so a passing layer 1 means something.
 
-CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17, a check that no file is stored with Windows line endings, and a dependency audit.
+CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17, a check that no file is stored with Windows line endings, and a dependency audit. An advisory with no fix can be accepted only by listing it, with a reason and an expiry date, in `server/audit-exceptions.json`; an expired or no-longer-needed entry fails the audit too.
 
 ## 8. Known limits
 

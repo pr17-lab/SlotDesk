@@ -96,7 +96,7 @@ cd server
 npm ci
 ```
 
-`npm ci` may report moderate vulnerabilities. They are in development tools only; the production dependencies have none (CI checks this). Do not run `npm audit fix`, which would change the locked versions.
+`npm ci` may report vulnerabilities in development and test tools. CI fails on any finding in the production dependencies and on any high or critical finding anywhere, unless the advisory is listed with a reason and an expiry date in `server/audit-exceptions.json` (checked by `server/scripts/audit-check.ts`). Do not run `npm audit fix`, which would change the locked versions.
 
 **5. Set the auth secret.** The app refuses to start without one. Generate a secret:
 
@@ -176,6 +176,7 @@ server/
     routes/                health, organizations, members, resources, services, working hours, availability
     data/                  the SQL (one file per kind of data)
   migrations/              SQL migration files
+  scripts/audit-check.ts   the CI dependency audit, with exceptions in audit-exceptions.json
   test/                    unit tests; test/db holds the database tests
 docker-compose.yml         local PostgreSQL 17
 .github/workflows/ci.yml   CI: checks, tests and a dependency audit
