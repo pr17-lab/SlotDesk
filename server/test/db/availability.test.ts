@@ -91,9 +91,10 @@ async function insertBooking(
   status: 'confirmed' | 'cancelled',
 ): Promise<void> {
   await client.query(
-    `INSERT INTO bookings (org_id, resource_id, starts_at, ends_at, status, customer_name, customer_email)
-     VALUES ($1, $2, $3, $4, $5, 'Guest', 'guest@example.com')`,
-    [orgId, resourceId, startsAt, endsAt, status],
+    `INSERT INTO bookings (org_id, resource_id, service_id, starts_at, ends_at, status, customer_name, customer_email)
+     VALUES ($1, $2, $3, $4, $5, $6, 'Guest', 'guest@example.com')`,
+    // Every booking in this file is in org A, so serviceA fits.
+    [orgId, resourceId, serviceA, startsAt, endsAt, status],
   );
 }
 

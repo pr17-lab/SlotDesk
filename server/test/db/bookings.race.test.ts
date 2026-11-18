@@ -20,7 +20,12 @@
 
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { insertOrg, insertResource, slotFor } from './helpers/booking-data.js';
+import {
+  insertOrg,
+  insertResource,
+  insertService,
+  slotFor,
+} from './helpers/booking-data.js';
 import {
   connectAndVerify,
   requireTestDatabase,
@@ -42,6 +47,7 @@ const { url, createClient } = requireTestDatabase();
 let setupClient: pg.Client;
 let orgId: bigint;
 let resourceId: bigint;
+let serviceId: bigint;
 // Race clients are opened inside the test so we can close them in finally.
 let raceClients: pg.Client[] = [];
 
@@ -56,6 +62,7 @@ beforeAll(async () => {
 
   orgId = await insertOrg(setupClient, 'Race Test Org');
   resourceId = await insertResource(setupClient, orgId, 'Race Room');
+  serviceId = await insertService(setupClient, orgId, 'Race Service');
 });
 
 afterAll(async () => {
@@ -102,10 +109,10 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
 
           await client.query<{ id: string }>(
             `INSERT INTO bookings
-                 (org_id, resource_id, starts_at, ends_at, status,
+                 (org_id, resource_id, service_id, starts_at, ends_at, status,
                   customer_name, customer_email)
-               VALUES ($1, $2, $3, $4, 'confirmed', 'Race Bot', 'race@example.com')`,
-            [orgId, resourceId, startsAt, endsAt],
+               VALUES ($1, $2, $3, $4, $5, 'confirmed', 'Race Bot', 'race@example.com')`,
+            [orgId, resourceId, serviceId, startsAt, endsAt],
           );
           // The INSERT succeeded -- commit immediately so blocked losers
           // can proceed. Do not wait for other clients.

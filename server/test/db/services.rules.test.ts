@@ -46,7 +46,9 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await client.query('TRUNCATE services');
+  // bookings references services, and PostgreSQL refuses to truncate a
+  // referenced table on its own, so both are named.
+  await client.query('TRUNCATE bookings, services');
 });
 
 describe('services constraint tests', () => {
