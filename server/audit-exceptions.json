@@ -1,0 +1,8 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "reason": "ReDoS needs an untrusted glob pattern; picomatch is reached only through test and lint tools (D-027 exception 1). No fixed release yet.",
+    "expires": "2026-12-01"
+  }
+]
