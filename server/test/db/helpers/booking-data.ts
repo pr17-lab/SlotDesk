@@ -24,6 +24,20 @@ export async function insertResource(
   return BigInt(r.rows[0]!.id);
 }
 
+// Insert one service under the given org and return its id.
+export async function insertService(
+  c: pg.Client,
+  oid: bigint,
+  name: string,
+  durationMinutes = 60,
+): Promise<bigint> {
+  const r = await c.query<{ id: string }>(
+    'INSERT INTO services (org_id, name, duration_minutes) VALUES ($1, $2, $3) RETURNING id',
+    [oid, name, durationMinutes],
+  );
+  return BigInt(r.rows[0]!.id);
+}
+
 // Return a fixed UTC slot for the given round index: one hour long,
 // starting `round` hours after `base`, so no two rounds overlap.
 // Fixed times (not "now") make failures reproducible.

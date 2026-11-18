@@ -5,7 +5,11 @@
 
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { insertOrg, insertResource } from './helpers/booking-data.js';
+import {
+  insertOrg,
+  insertResource,
+  insertService,
+} from './helpers/booking-data.js';
 import {
   connectAndVerify,
   expectError,
@@ -25,6 +29,7 @@ let client: pg.Client;
 let orgId: bigint;
 let resourceId: bigint;
 let resource2Id: bigint;
+let serviceId: bigint;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,10 +46,20 @@ async function insertBooking(
 ): Promise<bigint> {
   const r = await c.query<{ id: string }>(
     `INSERT INTO bookings
-       (org_id, resource_id, starts_at, ends_at, status, customer_name, customer_email)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+       (org_id, resource_id, service_id, starts_at, ends_at, status,
+        customer_name, customer_email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id`,
-    [oid, rid, startsAt, endsAt, status, customerName, customerEmail],
+    [
+      oid,
+      rid,
+      serviceId,
+      startsAt,
+      endsAt,
+      status,
+      customerName,
+      customerEmail,
+    ],
   );
   return BigInt(r.rows[0]!.id);
 }
@@ -61,6 +76,7 @@ beforeAll(async () => {
   orgId = await insertOrg(client, 'Rules Test Org');
   resourceId = await insertResource(client, orgId, 'Room A');
   resource2Id = await insertResource(client, orgId, 'Room B');
+  serviceId = await insertService(client, orgId, 'Haircut');
 });
 
 afterAll(async () => {
@@ -330,12 +346,70 @@ describe('bookings constraint tests', () => {
     const err = await expectError(() =>
       client.query(
         `INSERT INTO bookings
-           (org_id, resource_id, starts_at, ends_at, customer_name, customer_email)
-         VALUES ($1, $2, '2026-11-10 10:00Z', '2026-11-10 11:00Z', NULL, 'alice@example.com')`,
+           (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
+         VALUES ($1, $2, $3, '2026-11-10 10:00Z', '2026-11-10 11:00Z', NULL, 'alice@example.com')`,
+        [orgId, resourceId, serviceId],
+      ),
+    );
+    expect(err.code).toBe('23502');
+  });
+
+  // n. service_id (Step 10b, D-033). Both foreign keys give 23503, so each
+  //    test also checks the constraint name.
+  it('n: unknown service_id is rejected (23503, bookings_service_fk)', async () => {
+    const err = await expectError(() =>
+      client.query(
+        `INSERT INTO bookings
+           (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
+         VALUES ($1, $2, 999999, '2026-11-10 10:00Z', '2026-11-10 11:00Z', 'Alice', 'alice@example.com')`,
+        [orgId, resourceId],
+      ),
+    );
+    expect(err.code).toBe('23503');
+    expect(err.constraint).toBe('bookings_service_fk');
+  });
+
+  it("n: another organization's service is rejected (23503, bookings_service_fk)", async () => {
+    const otherOrgId = await insertOrg(client, 'Service Owner Org');
+    const otherServiceId = await insertService(client, otherOrgId, 'Other');
+    const err = await expectError(() =>
+      client.query(
+        `INSERT INTO bookings
+           (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
+         VALUES ($1, $2, $3, '2026-11-10 10:00Z', '2026-11-10 11:00Z', 'Alice', 'alice@example.com')`,
+        [orgId, resourceId, otherServiceId],
+      ),
+    );
+    expect(err.code).toBe('23503');
+    expect(err.constraint).toBe('bookings_service_fk');
+  });
+
+  it('n: null service_id is rejected (23502)', async () => {
+    const err = await expectError(() =>
+      client.query(
+        `INSERT INTO bookings
+           (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
+         VALUES ($1, $2, NULL, '2026-11-10 10:00Z', '2026-11-10 11:00Z', 'Alice', 'alice@example.com')`,
         [orgId, resourceId],
       ),
     );
     expect(err.code).toBe('23502');
+    expect(err.column).toBe('service_id');
+  });
+
+  it('n: deleting a service that has a booking is refused (23503)', async () => {
+    await insertBooking(
+      client,
+      orgId,
+      resourceId,
+      '2026-11-10 10:00Z',
+      '2026-11-10 11:00Z',
+    );
+    const err = await expectError(() =>
+      client.query('DELETE FROM services WHERE id = $1', [serviceId]),
+    );
+    expect(err.code).toBe('23503');
+    expect(err.constraint).toBe('bookings_service_fk');
   });
 
   // m. The guard refuses a TEST_DATABASE_URL whose database name does not end

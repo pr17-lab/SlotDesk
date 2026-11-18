@@ -46,7 +46,7 @@ SlotDesk uses one shared database schema for all organizations. Isolation is enf
 1. **The organization comes from the URL** (`/api/orgs/:orgId/...`), never from a request body.
 2. **A membership check runs on every organization route.** One query reads the caller's role from `memberships` for `(org_id, user_id)`. If there is no row, the answer is 404, the same body as an unknown route, so a non-member cannot tell whether an organization exists. A malformed `orgId` (not plain digits, or too large for a `bigint`) gets 404 without touching the database.
 3. **Every query on tenant data takes the organization ID as its first argument and filters on `org_id`.**
-4. **Composite foreign keys.** Tenant tables reference each other by `(org_id, id)`, so a booking cannot point at another organization's resource. The database refuses it.
+4. **Composite foreign keys.** Tenant tables reference each other by `(org_id, id)`, so a booking cannot point at another organization's resource or service. The database refuses it.
 5. **An isolation test for every tenant endpoint.** A member of organization B must get exactly the same answer for organization A as for an organization that does not exist.
 
 The weak point is stated plainly: composite foreign keys stop cross-tenant references, but they do not stop a query that forgets its `org_id` filter. Layers 3 and 5 exist for that reason. Row-level security was considered and left out of the first version.
