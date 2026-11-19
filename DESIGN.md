@@ -69,9 +69,9 @@ So the guarantee lives in the database. The `bookings` table has an exclusion co
 - It applies only to rows with `status = 'confirmed'`, so cancelled bookings free their slot.
 - All times are `timestamptz`, stored in UTC. Each resource has an IANA time zone for display and slot generation.
 
-The planned booking transaction is: begin, lock the resource row (scoped to the organization), validate, insert, commit. The constraint decides who wins. The lock does not provide correctness: it makes losers fail quickly and cleanly. In a test without it, the first failing round had 29 of 30 simultaneous attempts fail with deadlocks (error `40P01`) instead of a clean rejection.
+The booking transaction is: begin, lock the resource row (scoped to the organization), validate, insert, commit. The constraint decides who wins. The lock does not provide correctness: it makes losers fail quickly and cleanly. In a test without it, the first failing round had 29 of 30 simultaneous attempts fail with deadlocks (error `40P01`) instead of a clean rejection.
 
-What is built: the tables, the constraint, tests that prove it (section 7), and the mapping of database errors to HTTP responses: an overlap or a duplicate is 409, a bad reference is 404 (the same answer as a missing row), a bad value is 400, and a deadlock or serialization failure is 503 with `Retry-After: 1`. Deadlocks are not retried automatically: with the resource row locked first none are expected, so retry code would only hide a new locking bug. The mapped errors are logged with the error code, constraint name and table name only, never the rejected values. What is not built yet: the booking routes themselves. Those are next.
+What is built: the tables, the constraint, tests that prove it (section 7), and the mapping of database errors to HTTP responses: an overlap or a duplicate is 409, a bad reference is 404 (the same answer as a missing row), a bad value is 400, and a deadlock or serialization failure is 503 with `Retry-After: 1`. Deadlocks are not retried automatically: with the resource row locked first none are expected, so retry code would only hide a new locking bug. The mapped errors are logged with the error code, constraint name and table name only, never the rejected values. Creating a booking is built (`POST /api/orgs/:orgId/bookings`): inside the transaction it reads the service and working hours, accepts the start only if the availability function would offer it, and sets the end from the service's duration. That check never looks at other bookings; an overlap is left to the constraint, which answers 409. Because saving working hours takes the same lock, the hours cannot change between the check and the insert. Not built yet: listing, viewing and cancelling bookings.
 
 The constraint covers overlaps only. Working hours and similar rules will be application rules, so code that bypasses the API could break them. That limit is accepted.
 
@@ -140,14 +140,14 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 | Command | What it covers |
 |---|---|
 | `npm test` | Unit tests, including the availability and daylight saving time cases. No database needed. |
-| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource, service, working-hours and availability routes through the real app. |
+| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource, service, working-hours, availability and booking routes through the real app. |
 
 The database tests commit for real, create their own data, and run one file at a time. A guard refuses to run unless the database name ends in `_test`, and the guard has its own test.
 
 The booking concurrency tests have three layers, two of which are built:
 
 1. **Database race.** 30 independent connections try to book one slot, over 20 rounds. Exactly one must win each round, every other attempt must fail with `23P01` on `bookings_no_overlap`, and afterwards there must be 20 confirmed bookings with no overlapping pair. This uses separate connections started in one synchronous loop, not a connection pool, so the attempts really are simultaneous.
-2. **HTTP race** (planned, with the booking routes).
+2. **HTTP race** (planned: simultaneous requests to the booking route).
 3. **Mutation proof.** The same harness runs against a scratch schema with no constraint and a check-then-insert. It must produce more than one winner in some round, and fails otherwise. This proves the race harness can detect a double booking, so a passing layer 1 means something.
 
 CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17, a check that no file is stored with Windows line endings, and a dependency audit. An advisory with no fix can be accepted only by listing it, with a reason and an expiry date, in `server/audit-exceptions.json`; an expired or no-longer-needed entry fails the audit too.
@@ -158,8 +158,8 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 - Our own routes have no rate limit and list endpoints have no pagination. Both are marked in the code as shortcuts.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
-- Booking routes and the React client do not exist yet.
-- Availability is members-only for now, and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered.
+- Bookings cannot yet be listed, viewed or cancelled through the API, and the React client does not exist yet.
+- Availability and booking are members-only for now (staff book for guest customers), and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered or accepted. A client that retries after losing the response to a booking gets a 409 for its own booking.
 - Working hours cannot run past midnight, and there are no holidays, time off or buffers between bookings.
 - Every resource offers every service; there is no way to say a resource does not perform one. Services cannot be deleted.
 - The time zone of a resource cannot be changed after creation.

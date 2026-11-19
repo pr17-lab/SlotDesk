@@ -11,6 +11,7 @@ import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireMembership } from '../middleware/membership.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
 import { requireSession } from '../middleware/session.js';
+import { bookingsRouter } from './bookings.js';
 import { membersRouter } from './members.js';
 import { resourcesRouter } from './resources.js';
 import { servicesRouter } from './services.js';
@@ -49,6 +50,7 @@ orgRouter.use(requireMembership);
 orgRouter.use('/members', membersRouter);
 orgRouter.use('/resources', resourcesRouter);
 orgRouter.use('/services', servicesRouter);
+orgRouter.use('/bookings', bookingsRouter);
 
 orgRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   // The organization comes only from the membership check, never from
