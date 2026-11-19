@@ -189,3 +189,58 @@ export function availableSlots(input: {
   }
   return slots;
 }
+
+// The slot a booking request asks for: the one starting at exactly
+// `startsAt`, if availableSlots would offer it with no bookings passed in,
+// else null (D-033: bookable means offered). It never looks at other
+// bookings, so the bookings_no_overlap constraint alone decides overlap. The
+// slot's end comes from the service's duration, so the server, not the
+// client, sets ends_at.
+//
+// The working hours that apply are those of the start's local date in the
+// resource's time zone, not its UTC date: a 21:00 start on a Monday in New
+// York is 02:00 on Tuesday in UTC. A sweep of every day of 2026 in nine
+// zones (Tested, 2026-11-19), including two whose clocks change at midnight,
+// found no offered start whose local date differed from its window's date,
+// so asking about that one local day is enough.
+//
+// `startsAt` has already passed Zod's ISO check, but Zod accepts more
+// fractional digits than Temporal can read (ten or more), and Temporal then
+// throws a RangeError (Tested). Such a start is never on the 15-minute grid,
+// so it is simply not offered, as in normalizeTimeZone above.
+export function bookableSlot(input: {
+  timeZone: string;
+  windows: WorkingWindow[];
+  durationMinutes: number;
+  startsAt: string;
+  now: Date;
+}): Slot | null {
+  let start: Temporal.Instant;
+  try {
+    start = Temporal.Instant.from(input.startsAt);
+  } catch (err) {
+    if (err instanceof RangeError) {
+      return null;
+    }
+    throw err;
+  }
+  const localDate = start
+    .toZonedDateTimeISO(input.timeZone)
+    .toPlainDate()
+    .toString();
+  const slots = availableSlots({
+    timeZone: input.timeZone,
+    windows: input.windows,
+    durationMinutes: input.durationMinutes,
+    bookings: [],
+    from: localDate,
+    to: localDate,
+    now: input.now,
+  });
+  // Compared as exact instants, so 03:30:00Z, 09:00:00+05:30 and
+  // 03:30:00.000Z all match the same slot.
+  return (
+    slots.find((slot) => Temporal.Instant.from(slot.startsAt).equals(start)) ??
+    null
+  );
+}

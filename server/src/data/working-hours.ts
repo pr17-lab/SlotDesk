@@ -8,13 +8,15 @@ export type WorkingWindow = {
   endMinute: number;
 };
 
-// One constant because the same query runs twice: in listWorkingHours, and
-// inside the replaceWorkingHours transaction to read the stored week back.
+// One constant because the same query runs three times: in
+// listWorkingHours, inside the replaceWorkingHours transaction to read the
+// stored week back, and inside the createBooking transaction in bookings.ts
+// (exported for that).
 //
 // The double quotes in "startMinute" and "endMinute" keep the capital M:
 // without them PostgreSQL would return the columns as "startminute" and
 // "endminute".
-const SELECT_WORKING_HOURS = `SELECT weekday, start_minute AS "startMinute", end_minute AS "endMinute"
+export const SELECT_WORKING_HOURS = `SELECT weekday, start_minute AS "startMinute", end_minute AS "endMinute"
   FROM working_hours WHERE org_id = $1 AND resource_id = $2
   ORDER BY weekday, start_minute`;
 

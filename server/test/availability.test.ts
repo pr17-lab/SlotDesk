@@ -1,8 +1,10 @@
-// Steps 9a and 9d: the time zone check, local time to UTC, and free slots. Unit tests, no database.
+// Steps 9a, 9d and 10c: the time zone check, local time to UTC, free slots,
+// and the booking start check. Unit tests, no database.
 import { describe, expect, it } from 'vitest';
 import { Temporal } from 'temporal-polyfill';
 import {
   availableSlots,
+  bookableSlot,
   bookingSearchRange,
   daysInRange,
   normalizeTimeZone,
@@ -374,5 +376,168 @@ describe('bookingSearchRange', () => {
       start: '2026-11-16T00:00:00Z',
       end: '2026-12-02T00:00:00Z',
     });
+  });
+});
+
+// bookableSlot (Step 10c): a start is accepted exactly when availableSlots
+// would offer it, with no bookings. The expected UTC instants were computed
+// with temporal-polyfill 1.0.8 on Node 24.22.3 and agree with Python's
+// zoneinfo (architect, 2026-11-19).
+function bookable(input: {
+  timeZone: string;
+  windows: Window[];
+  durationMinutes: number;
+  startsAt: string;
+  now?: Date;
+}) {
+  return bookableSlot({ ...input, now: input.now ?? LONG_AGO });
+}
+
+describe('bookableSlot: India (no DST)', () => {
+  // Monday 2099-01-05, two touching windows, 09:00 to 13:00 and 13:00 to
+  // 17:00, and a 60-minute service.
+  const india = (startsAt: string, now?: Date) =>
+    bookable({
+      timeZone: INDIA,
+      windows: [
+        { weekday: 1, startMinute: 540, endMinute: 780 },
+        { weekday: 1, startMinute: 780, endMinute: 1020 },
+      ],
+      durationMinutes: 60,
+      startsAt,
+      now,
+    });
+
+  it('accepts an offered start and sets the end from the duration', () => {
+    expect(india('2099-01-05T03:30:00Z')).toEqual({
+      startsAt: '2099-01-05T03:30:00Z',
+      endsAt: '2099-01-05T04:30:00Z',
+    });
+  });
+
+  // The same instant written four ways; the slot is always written in UTC.
+  it.each([
+    '2099-01-05T09:00:00+05:30',
+    '2099-01-05T03:30:00.000Z',
+    '2099-01-05T03:30:00-00:00',
+  ])('accepts %s as the 03:30Z slot', (startsAt) => {
+    expect(india(startsAt)?.startsAt).toBe('2099-01-05T03:30:00Z');
+  });
+
+  it('accepts the last start that fits (16:00 local)', () => {
+    expect(india('2099-01-05T10:30:00Z')?.endsAt).toBe('2099-01-05T11:30:00Z');
+  });
+
+  it.each([
+    ['one millisecond after an offered start', '2099-01-05T03:30:00.001Z'],
+    ['an off-grid start (09:05 local)', '2099-01-05T03:35:00Z'],
+    ['a start too late to fit (16:15 local)', '2099-01-05T10:45:00Z'],
+    ['a start before the hours (08:45 local)', '2099-01-05T03:15:00Z'],
+    // 12:30 to 13:30 would run across the two touching windows (D-033).
+    ['a booking across two touching windows', '2099-01-05T07:00:00Z'],
+    ['a Tuesday (no hours)', '2099-01-06T03:30:00Z'],
+  ])('refuses %s', (_label, startsAt) => {
+    expect(india(startsAt)).toBeNull();
+  });
+
+  // Zod accepts ten or more fractional digits; Temporal cannot read them and
+  // throws a RangeError. This fails if bookableSlot stops catching it.
+  it('refuses a start with ten fractional digits instead of throwing', () => {
+    expect(india('2099-01-05T03:30:00.1234567891Z')).toBeNull();
+  });
+
+  it('accepts a start exactly at now', () => {
+    const now = new Date('2099-01-05T03:30:00Z');
+    expect(india('2099-01-05T03:30:00Z', now)).not.toBeNull();
+  });
+
+  it('refuses a start one millisecond in the past', () => {
+    const now = new Date('2099-01-05T03:30:00.001Z');
+    expect(india('2099-01-05T03:30:00Z', now)).toBeNull();
+  });
+});
+
+describe('bookableSlot: the local date, not the UTC date', () => {
+  // New York, Monday 2026-11-02, 20:00 to 24:00 local, a 60-minute service.
+  // 21:00 on Monday in New York is 02:00 on Tuesday in UTC. This fails if
+  // bookableSlot looks up the working hours of the UTC date.
+  const evening = (startsAt: string) =>
+    bookable({
+      timeZone: NEW_YORK,
+      windows: [{ weekday: 1, startMinute: 1200, endMinute: 1440 }],
+      durationMinutes: 60,
+      startsAt,
+    });
+
+  it('accepts Monday 21:00 local, which is Tuesday 02:00Z', () => {
+    expect(evening('2026-11-03T02:00:00Z')).toEqual({
+      startsAt: '2026-11-03T02:00:00Z',
+      endsAt: '2026-11-03T03:00:00Z',
+    });
+  });
+
+  it('accepts 23:00 local, which ends at the window end, minute 1440', () => {
+    expect(evening('2026-11-03T04:00:00Z')?.endsAt).toBe(
+      '2026-11-03T05:00:00Z',
+    );
+  });
+
+  it('refuses 23:15 local, which would end after midnight', () => {
+    expect(evening('2026-11-03T04:15:00Z')).toBeNull();
+  });
+});
+
+describe('bookableSlot: New York clock changes', () => {
+  // Sunday 2026-11-01, 00:00 to 04:00 local, 60 minutes. 01:30 happens
+  // twice: 05:30Z (EDT) and 06:30Z (EST). Slots step in real minutes, so
+  // both are offered and both can be booked.
+  const fallBack = (startsAt: string) =>
+    bookable({
+      timeZone: NEW_YORK,
+      windows: [{ weekday: 7, startMinute: 0, endMinute: 240 }],
+      durationMinutes: 60,
+      startsAt,
+    });
+
+  it.each([
+    [
+      'the first 01:30 (EDT)',
+      '2026-11-01T01:30:00-04:00',
+      '2026-11-01T05:30:00Z',
+    ],
+    [
+      'the second 01:30 (EST)',
+      '2026-11-01T01:30:00-05:00',
+      '2026-11-01T06:30:00Z',
+    ],
+    [
+      'the last start, 03:00 EST',
+      '2026-11-01T08:00:00Z',
+      '2026-11-01T08:00:00Z',
+    ],
+  ])('fall back: accepts %s', (_label, startsAt, expected) => {
+    expect(fallBack(startsAt)?.startsAt).toBe(expected);
+  });
+
+  // Sunday 2026-03-08, 01:00 to 05:00 local, 60 minutes: 02:00 to 03:00 does
+  // not exist, so the window is three real hours (06:00Z to 09:00Z).
+  const springForward = (startsAt: string) =>
+    bookable({
+      timeZone: NEW_YORK,
+      windows: [{ weekday: 7, startMinute: 60, endMinute: 300 }],
+      durationMinutes: 60,
+      startsAt,
+    });
+
+  it.each([
+    ['01:30 EST', '2026-03-08T06:30:00Z'],
+    ['03:00 EDT, the first time after the gap', '2026-03-08T07:00:00Z'],
+    ['04:00 EDT, the last start', '2026-03-08T08:00:00Z'],
+  ])('spring forward: accepts %s', (_label, startsAt) => {
+    expect(springForward(startsAt)).not.toBeNull();
+  });
+
+  it('spring forward: refuses 08:15Z, which would end after 05:00 EDT', () => {
+    expect(springForward('2026-03-08T08:15:00Z')).toBeNull();
   });
 });

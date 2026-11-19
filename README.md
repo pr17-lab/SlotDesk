@@ -17,10 +17,11 @@ This is a work in progress. What exists and is tested today:
 - Services (create, list, view, update), each with a duration of 5 to 480 minutes.
 - Working hours per resource (a weekly timetable in the resource's time zone, replaced as a whole week).
 - Availability: the free start times for a service on a resource, in UTC, with daylight saving changes handled.
+- Booking a guest customer into a slot (owner or staff), accepted only for a start the availability route would offer.
 - The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections.
 - The API runs on a free Render instance with a Neon database.
 
-Not built yet: the booking routes and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+Not built yet: listing, viewing and cancelling bookings, the HTTP booking race test, and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live API:** `https://slotdesk-wfgi.onrender.com/api/health`. It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
@@ -53,6 +54,7 @@ Every route is under `/api`. IDs are strings in JSON.
 | `GET /api/orgs/:orgId/resources/:resourceId/working-hours` | members | `{ windows: [{ weekday, startMinute, endMinute }] }`, sorted by weekday and start (404 if the resource is not found) |
 | `PUT /api/orgs/:orgId/resources/:resourceId/working-hours` | owner | Replace the whole week with `{ windows }`: weekday 1 is Monday; minutes since local midnight in the resource's time zone, so 540 is 09:00; windows on one day may touch but not overlap; at most 70; `[]` closes the resource (400 for a bad or overlapping window; 404 if the resource is not found) |
 | `GET /api/orgs/:orgId/resources/:resourceId/availability?serviceId=&from=&to=` | members | `{ timeZone, slots: [{ startsAt, endsAt }] }` in UTC: start times every 15 minutes inside the working hours where the service fits and no confirmed booking overlaps; `from` and `to` are local dates (`YYYY-MM-DD`) in the resource's time zone, both included, at most 14 days; past start times are left out. A hint, not a promise: a slot can be taken by the time it is booked (400 for a bad query; 404 if the resource or service is not found) |
+| `POST /api/orgs/:orgId/bookings` | members | Book `{ resourceId, serviceId, startsAt, customerName, customerEmail }` for a guest customer (201 with the booking). `startsAt` is an instant with an offset or `Z`, for example `2099-01-05T09:00:00+05:30`; it is accepted only if the availability route would offer exactly that start, and the server sets the end from the service's duration. 400 for a bad body or a start that is not offered; 404 if the resource or service is not found; 409 if a confirmed booking overlaps |
 
 A person who is not a member of an organization gets 404, the same answer as for an organization that does not exist. Requests that change data under `/api/orgs` must send an `Origin` header that matches `BETTER_AUTH_URL`.
 
@@ -173,7 +175,7 @@ server/
     config.ts              environment settings checked with Zod
     db.ts                  the PostgreSQL connection pool
     middleware/            origin, session, membership and role checks; errors
-    routes/                health, organizations, members, resources, services, working hours, availability
+    routes/                health, organizations, members, resources, services, working hours, availability, bookings
     data/                  the SQL (one file per kind of data)
   migrations/              SQL migration files
   scripts/audit-check.ts   the CI dependency audit, with exceptions in audit-exceptions.json
