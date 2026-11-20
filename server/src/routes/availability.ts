@@ -1,38 +1,14 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import {
-  availableSlots,
-  bookingSearchRange,
-  daysInRange,
-  MAX_RANGE_DAYS,
-} from '../availability.js';
+import { availableSlots, bookingSearchRange } from '../availability.js';
 import { listConfirmedBookings } from '../data/bookings.js';
 import { getResource } from '../data/resources.js';
 import { getService } from '../data/services.js';
 import { listWorkingHours } from '../data/working-hours.js';
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
-
-// A local date such as 2026-11-23, in the resource's time zone.
-//
-// Why abort: true (Tested): in Zod 4.6.7 a failed format check on a string
-// does not stop the object-level refines below. Without it, from=2026-02-30
-// reached daysInRange, temporal-polyfill threw "RangeError: Invalid day: 30",
-// and the route would answer 500. With abort: true that field fails alone
-// and the refines below are skipped.
-//
-// Why the year bounds (Tested, PostgreSQL 16): without them 0000-01-01 and
-// 9999-12-31 are valid ISO dates, but bookingSearchRange then produces
-// -000001-12-31T00:00:00Z or +010000-01-02T00:00:00Z, which PostgreSQL
-// refuses (a 500). Comparing YYYY-MM-DD strings works because they sort like
-// dates.
-const localDate = z.iso
-  .date({ abort: true })
-  .refine((value) => value >= '2000-01-01' && value <= '2099-12-31', {
-    message: 'Date must be between 2000-01-01 and 2099-12-31',
-    abort: true,
-  });
+import { localDate, withDateRangeRules } from './date-range.js';
 
 // Strict, so an unknown or misspelt key is a 400. Express 5 turns a repeated
 // key (from=a&from=b) into an array, which is a 400 here (expected string,
@@ -42,22 +18,15 @@ const localDate = z.iso
 // segment. An unknown one, or one from another organization, is a 404 (in
 // the handler below).
 //
-// query.from <= query.to compares strings, which works because YYYY-MM-DD
-// strings sort like dates.
-const availabilityQuerySchema = z
-  .strictObject({
+// The from and to rules (the date format, the years, from not after to, at
+// most 14 days) live in date-range.ts, shared with the booking list.
+const availabilityQuerySchema = withDateRangeRules(
+  z.strictObject({
     serviceId: z.string().refine(isValidId, { message: 'Not a valid id' }),
     from: localDate,
     to: localDate,
-  })
-  .refine((query) => query.from <= query.to, {
-    message: 'from must not be after to',
-    path: ['to'],
-  })
-  .refine((query) => daysInRange(query.from, query.to) <= MAX_RANGE_DAYS, {
-    message: `The range must be at most ${MAX_RANGE_DAYS} days`,
-    path: ['to'],
-  });
+  }),
+);
 
 // mergeParams is needed here: :resourceId belongs to the mount path in
 // resources.ts ('/:resourceId/availability'), so without it
