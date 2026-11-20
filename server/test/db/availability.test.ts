@@ -82,7 +82,8 @@ async function createService(cookie: string, orgId: string): Promise<string> {
   return res.body.id as string;
 }
 
-// Bookings are inserted directly: there is no booking route until Week 3.
+// Bookings are inserted directly, not through the booking route, so each case
+// controls the exact times and status.
 async function insertBooking(
   orgId: string,
   resourceId: string,

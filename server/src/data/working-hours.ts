@@ -49,8 +49,8 @@ export async function replaceWorkingHours(
     // architect measured this on 2026-11-17 (Tested, PostgreSQL 16, 50 rounds
     // of two simultaneous replaces whose Monday windows overlap): without the
     // lock one replace failed with 23P01 in 46 of 50 rounds; with it all 100
-    // succeeded. It is the same lock-first shape the Week 3 booking
-    // transaction will use (D-012).
+    // succeeded. It is the same lock-first shape the booking transaction
+    // uses (D-012).
     const resource = await client.query(
       'SELECT id FROM resources WHERE org_id = $1 AND id = $2 FOR UPDATE',
       [orgId, resourceId],

@@ -22,8 +22,9 @@ export type Booking = {
 
 // The columns of a Booking, renamed to the API's names. Shared by the four
 // queries in this file that return whole bookings (create, list, view,
-// cancel), so they always return the same shape. The double quotes keep the capital letters: without them
-// PostgreSQL would return "resourceid", "startsat" and so on.
+// cancel), so they always return the same shape. The double quotes keep the
+// capital letters: without them PostgreSQL would return "resourceid",
+// "startsat" and so on.
 const BOOKING_COLUMNS = `id, resource_id AS "resourceId", service_id AS "serviceId",
   starts_at AS "startsAt", ends_at AS "endsAt", status,
   customer_name AS "customerName", customer_email AS "customerEmail",
