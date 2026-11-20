@@ -18,10 +18,10 @@ This is a work in progress. What exists and is tested today:
 - Working hours per resource (a weekly timetable in the resource's time zone, replaced as a whole week).
 - Availability: the free start times for a service on a resource, in UTC, with daylight saving changes handled.
 - Booking a guest customer into a slot (owner or staff), accepted only for a start the availability route would offer.
-- The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections.
+- The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections and under 10 simultaneous requests to the booking route.
 - The API runs on a free Render instance with a Neon database.
 
-Not built yet: listing, viewing and cancelling bookings, the HTTP booking race test, and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+Not built yet: listing, viewing and cancelling bookings, and the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live API:** `https://slotdesk-wfgi.onrender.com/api/health`. It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
@@ -142,7 +142,7 @@ npm run test:db
 ```
 
 - `npm test` runs the unit tests and needs no database.
-- `npm run test:db` runs the database tests against `slotdesk_test`. It deletes and re-creates the tables in that database on every run and refuses to run against any database whose name does not end in `_test`. The 30-connection booking race tests are part of it. Some tests kill database connections on purpose, so error lines in its output (for example `Idle database client error`) are expected; what matters is the final summary.
+- `npm run test:db` runs the database tests against `slotdesk_test`. It deletes and re-creates the tables in that database on every run and refuses to run against any database whose name does not end in `_test`. The booking race tests (30 database connections, and 10 simultaneous HTTP requests) are part of it. Some tests kill database connections on purpose, so error lines in its output (for example `Idle database client error`) are expected; what matters is the final summary.
 
 ### If something fails
 

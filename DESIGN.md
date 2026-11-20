@@ -144,10 +144,10 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 
 The database tests commit for real, create their own data, and run one file at a time. A guard refuses to run unless the database name ends in `_test`, and the guard has its own test.
 
-The booking concurrency tests have three layers, two of which are built:
+The booking concurrency tests have three layers:
 
 1. **Database race.** 30 independent connections try to book one slot, over 20 rounds. Exactly one must win each round, every other attempt must fail with `23P01` on `bookings_no_overlap`, and afterwards there must be 20 confirmed bookings with no overlapping pair. This uses separate connections started in one synchronous loop, not a connection pool, so the attempts really are simultaneous.
-2. **HTTP race** (planned: simultaneous requests to the booking route).
+2. **HTTP race.** 10 simultaneous requests to the booking route on one running server, over 20 rounds, in two shapes. Identical slot: exactly one 201 and nine 409s each round. Staggered: starts 15 minutes apart with a 60-minute service, so each request overlaps its neighbours; every answer must be 201 or 409, and every 409 must overlap a booking that won. A deadlock is answered with 503, so the staggered race is what proves the resource-row lock: with the lock removed it fails on almost every run. Both tests also check that all requests were sent before the first answer arrived.
 3. **Mutation proof.** The same harness runs against a scratch schema with no constraint and a check-then-insert. It must produce more than one winner in some round, and fails otherwise. This proves the race harness can detect a double booking, so a passing layer 1 means something.
 
 CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17, a check that no file is stored with Windows line endings, and a dependency audit. An advisory with no fix can be accepted only by listing it, with a reason and an expiry date, in `server/audit-exceptions.json`; an expired or no-longer-needed entry fails the audit too.
