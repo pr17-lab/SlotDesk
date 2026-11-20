@@ -1,5 +1,6 @@
-// Steps 9a, 9d and 10c: the time zone check, local time to UTC, free slots,
-// and the booking start check. Unit tests, no database.
+// Steps 9a, 9d, 10c and 10e: the time zone check, local time to UTC, free
+// slots, the booking start check and the booking list's local-day range.
+// Unit tests, no database.
 import { describe, expect, it } from 'vitest';
 import { Temporal } from 'temporal-polyfill';
 import {
@@ -7,6 +8,7 @@ import {
   bookableSlot,
   bookingSearchRange,
   daysInRange,
+  localDaysToUtcRange,
   normalizeTimeZone,
 } from '../src/availability.js';
 
@@ -376,6 +378,91 @@ describe('bookingSearchRange', () => {
       start: '2026-11-16T00:00:00Z',
       end: '2026-12-02T00:00:00Z',
     });
+  });
+});
+
+// localDaysToUtcRange (Step 10e): the exact UTC range [start, end) of the
+// local dates from `from` to `to`. Expected values computed with
+// temporal-polyfill 1.0.8 on Node 24.22.3 and agree with Python's zoneinfo
+// (architect, 2026-11-20).
+describe('localDaysToUtcRange', () => {
+  it.each([
+    // +05:30 all year: the local day starts at 18:30Z the UTC day before.
+    [
+      'India',
+      'Asia/Kolkata',
+      '2099-01-05',
+      '2099-01-05',
+      '2099-01-04T18:30:00Z',
+      '2099-01-05T18:30:00Z',
+    ],
+    // Spring forward at 02:00: a 23-hour day.
+    [
+      'New York spring forward',
+      'America/New_York',
+      '2026-03-08',
+      '2026-03-08',
+      '2026-03-08T05:00:00Z',
+      '2026-03-09T04:00:00Z',
+    ],
+    // Fall back at 02:00: a 25-hour day.
+    [
+      'New York fall back',
+      'America/New_York',
+      '2026-11-01',
+      '2026-11-01',
+      '2026-11-01T04:00:00Z',
+      '2026-11-02T05:00:00Z',
+    ],
+    // The clocks jump from 00:00 to 01:00, so the day starts at 01:00 local
+    // (-03:00), not at a midnight that does not exist.
+    [
+      'Santiago, midnight skipped',
+      'America/Santiago',
+      '2026-09-06',
+      '2026-09-06',
+      '2026-09-06T04:00:00Z',
+      '2026-09-07T03:00:00Z',
+    ],
+    // The clocks go back from 01:00 to 00:00, so midnight happens twice; the
+    // day starts at the first one (-04:00).
+    [
+      'Havana, midnight twice',
+      'America/Havana',
+      '2026-11-01',
+      '2026-11-01',
+      '2026-11-01T04:00:00Z',
+      '2026-11-02T05:00:00Z',
+    ],
+    // 14 days, both included: the end is the start of the day after `to`.
+    [
+      'UTC, 14 days',
+      'UTC',
+      '2026-11-17',
+      '2026-11-30',
+      '2026-11-17T00:00:00Z',
+      '2026-12-01T00:00:00Z',
+    ],
+    // The two ends of the allowed years, in the zones furthest from UTC
+    // (+14:00 and -12:00). Both results are inside PostgreSQL's range.
+    [
+      'the last allowed day, +14:00',
+      'Pacific/Kiritimati',
+      '2099-12-31',
+      '2099-12-31',
+      '2099-12-30T10:00:00Z',
+      '2099-12-31T10:00:00Z',
+    ],
+    [
+      'the first allowed day, -12:00',
+      'Etc/GMT+12',
+      '2000-01-01',
+      '2000-01-01',
+      '2000-01-01T12:00:00Z',
+      '2000-01-02T12:00:00Z',
+    ],
+  ])('%s', (_label, timeZone, from, to, start, end) => {
+    expect(localDaysToUtcRange(from, to, timeZone)).toEqual({ start, end });
   });
 });
 

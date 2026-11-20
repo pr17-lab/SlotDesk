@@ -20,6 +20,15 @@ export type Booking = {
   createdAt: Date;
 };
 
+// The columns of a Booking, renamed to the API's names. Shared by the four
+// queries in this file that return whole bookings (create, list, view,
+// cancel), so they always return the same shape. The double quotes keep the capital letters: without them
+// PostgreSQL would return "resourceid", "startsat" and so on.
+const BOOKING_COLUMNS = `id, resource_id AS "resourceId", service_id AS "serviceId",
+  starts_at AS "startsAt", ends_at AS "endsAt", status,
+  customer_name AS "customerName", customer_email AS "customerEmail",
+  created_at AS "createdAt"`;
+
 // What createBooking found. Two kinds of failure, because the route answers
 // them differently: 404 for a resource or service that is not in this
 // organization, 400 for a start time that is not offered.
@@ -95,10 +104,7 @@ export async function createBooking(
       `INSERT INTO bookings
          (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, resource_id AS "resourceId", service_id AS "serviceId",
-         starts_at AS "startsAt", ends_at AS "endsAt", status,
-         customer_name AS "customerName", customer_email AS "customerEmail",
-         created_at AS "createdAt"`,
+       RETURNING ${BOOKING_COLUMNS}`,
       [
         orgId,
         request.resourceId,
@@ -139,4 +145,67 @@ export async function listConfirmedBookings(
     [orgId, resourceId, start, end],
   );
   return result.rows;
+}
+
+// The functions below are single pool.query calls, like
+// listConfirmedBookings, so the D-014 listener rule does not apply.
+
+// The bookings of one resource that start inside [start, end), confirmed and
+// cancelled, oldest first (Step 10e). The route passes the exact UTC range of
+// the requested local dates, so a booking is listed on the local date it
+// starts. The route has already checked that the resource is in this
+// organization; the org_id filter here is kept anyway, as in every tenant
+// query (D-030).
+//
+// id breaks a tie: a cancelled booking and a later confirmed one can start
+// at the same instant, and without it their order could change between
+// calls.
+export async function listBookings(
+  orgId: string,
+  resourceId: string,
+  start: string,
+  end: string,
+): Promise<Booking[]> {
+  const result = await pool.query<Booking>(
+    `SELECT ${BOOKING_COLUMNS}
+     FROM bookings
+     WHERE org_id = $1 AND resource_id = $2
+       AND starts_at >= $3 AND starts_at < $4
+     ORDER BY starts_at, id`,
+    [orgId, resourceId, start, end],
+  );
+  return result.rows;
+}
+
+// One booking, or null when it is not in this organization. Filtered on
+// org_id and id only, so a missing org_id filter would return another
+// organization's booking, and the isolation test sees it (D-033).
+export async function getBooking(
+  orgId: string,
+  bookingId: string,
+): Promise<Booking | null> {
+  const result = await pool.query<Booking>(
+    `SELECT ${BOOKING_COLUMNS} FROM bookings WHERE org_id = $1 AND id = $2`,
+    [orgId, bookingId],
+  );
+  return result.rows[0] ?? null;
+}
+
+// Cancels one booking and returns it, or null when it is not in this
+// organization (D-033). No transaction and no lock: setting the status to
+// cancelled can never create an overlap, because the bookings_no_overlap
+// constraint covers confirmed bookings only. Cancelling a booking that is
+// already cancelled changes nothing and returns it again, so a client that
+// retries after losing the answer gets the same 200.
+export async function cancelBooking(
+  orgId: string,
+  bookingId: string,
+): Promise<Booking | null> {
+  const result = await pool.query<Booking>(
+    `UPDATE bookings SET status = 'cancelled'
+     WHERE org_id = $1 AND id = $2
+     RETURNING ${BOOKING_COLUMNS}`,
+    [orgId, bookingId],
+  );
+  return result.rows[0] ?? null;
 }

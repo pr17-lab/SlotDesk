@@ -1,9 +1,17 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { createBooking } from '../data/bookings.js';
+import { localDaysToUtcRange } from '../availability.js';
+import {
+  cancelBooking,
+  createBooking,
+  getBooking,
+  listBookings,
+} from '../data/bookings.js';
+import { getResource } from '../data/resources.js';
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
+import { localDate, withDateRangeRules } from './date-range.js';
 
 // IDs in the body are checked like IDs in a URL. A malformed one is a 400,
 // because it is a body value, not a path segment (like serviceId in the
@@ -43,6 +51,19 @@ const createBookingSchema = z.strictObject({
   customerEmail: customerEmailSchema,
 });
 
+// The booking list query. Strict, like the availability query, so an
+// unknown key is a 400. resourceId is required: a list is always for one
+// resource, because from and to are local dates in that resource's time
+// zone. The from and to rules are the availability route's, from
+// date-range.ts (D-033).
+const listBookingsQuerySchema = withDateRangeRules(
+  z.strictObject({
+    resourceId: idSchema,
+    from: localDate,
+    to: localDate,
+  }),
+);
+
 // No mergeParams: this router reads the organization only from
 // res.locals.membership (set by requireMembership in orgRouter).
 export const bookingsRouter = Router();
@@ -81,3 +102,79 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   }
   res.status(201).json(result.booking);
 });
+
+// The bookings of one resource that start on the local dates from `from` to
+// `to` (both included, at most 14 days), confirmed and cancelled, oldest
+// first (D-033). Owner and staff.
+bookingsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+  // shortcut: no pagination on the booking list; the 14-day limit keeps it small, add pagination if a resource can have hundreds of bookings in two weeks
+  const parsed = listBookingsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const { resourceId, from, to } = parsed.data;
+  const orgId = res.locals.membership.orgId;
+
+  // The resource lookup is what keeps another organization's resource out:
+  // it is filtered on org_id, so org B's resource is a 404 here, identical
+  // to one that does not exist (D-030). It also gives the time zone.
+  const resource = await getResource(orgId, resourceId);
+  if (resource === null) {
+    notFoundHandler(req, res);
+    return;
+  }
+  // The local dates become one exact UTC range in src/availability.ts, the
+  // one place for time zone conversion (D-032).
+  const range = localDaysToUtcRange(from, to, resource.timeZone);
+  const bookings = await listBookings(
+    orgId,
+    resourceId,
+    range.start,
+    range.end,
+  );
+  res.status(200).json(bookings);
+});
+
+// One booking. A malformed ID, an unknown one and another organization's
+// one all get the same 404 (D-030).
+bookingsRouter.get(
+  '/:bookingId',
+  async (req: Request, res: Response): Promise<void> => {
+    const bookingId = req.params.bookingId;
+    // A malformed ID is a 404 without a database query.
+    if (!isValidId(bookingId)) {
+      notFoundHandler(req, res);
+      return;
+    }
+    const booking = await getBooking(res.locals.membership.orgId, bookingId);
+    if (booking === null) {
+      notFoundHandler(req, res);
+      return;
+    }
+    res.status(200).json(booking);
+  },
+);
+
+// Cancels a booking and returns it with status 'cancelled' (D-033). Owner
+// and staff, like booking. POST, not DELETE, because the row stays (it is
+// still listed, with its status); it also means the origin check applies,
+// as for every non-GET route under /api/orgs. Cancelling twice is a 200
+// both times. There is no un-cancel: book the slot again instead. A body,
+// if one is sent, is ignored.
+bookingsRouter.post(
+  '/:bookingId/cancel',
+  async (req: Request, res: Response): Promise<void> => {
+    const bookingId = req.params.bookingId;
+    if (!isValidId(bookingId)) {
+      notFoundHandler(req, res);
+      return;
+    }
+    const booking = await cancelBooking(res.locals.membership.orgId, bookingId);
+    if (booking === null) {
+      notFoundHandler(req, res);
+      return;
+    }
+    res.status(200).json(booking);
+  },
+);

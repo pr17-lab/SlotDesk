@@ -74,6 +74,35 @@ export function bookingSearchRange(
   };
 }
 
+// The exact UTC range of the local dates from `from` to `to` (both
+// included) in `timeZone`: from the start of `from` to the start of the day
+// after `to`, as [start, end). The booking list uses it to find the bookings
+// that start on those local dates (Step 10e).
+//
+// Unlike bookingSearchRange above, this range is exact, so it needs the time
+// zone. toZonedDateTime with no time gives the first instant of the local
+// day. That is usually midnight, but not always: where the clocks jump
+// forward at midnight (Santiago in September) the day starts at 01:00, and
+// where midnight happens twice (Havana in November) the earlier one is taken
+// (Tested against Python zoneinfo, 2026-11-20).
+export function localDaysToUtcRange(
+  from: string,
+  to: string,
+  timeZone: string,
+): { start: string; end: string } {
+  return {
+    start: Temporal.PlainDate.from(from)
+      .toZonedDateTime(timeZone)
+      .toInstant()
+      .toString(),
+    end: Temporal.PlainDate.from(to)
+      .add({ days: 1 })
+      .toZonedDateTime(timeZone)
+      .toInstant()
+      .toString(),
+  };
+}
+
 // The exact instant of `minute` (minutes since local midnight) on `date` in
 // `timeZone`. Minute 1440 means midnight at the start of the next day.
 function toInstant(
