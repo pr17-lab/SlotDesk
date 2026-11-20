@@ -52,9 +52,9 @@ function hasOverlap(windows: WorkingWindow[]): boolean {
 }
 
 // The database also refuses overlaps (working_hours_no_overlap), and that
-// constraint stays the guarantee. The API checks first because, until the
-// Week 3 error mapping exists, a database refusal is a 500; this gives a 400
-// with a clear message instead.
+// constraint stays the guarantee. The API checks first so the caller gets a
+// 400 with a clear message; a database refusal alone would be answered by the
+// central error mapping as a 409 with no detail (D-033).
 //
 // max(70) is 10 windows a day. An empty array is valid: the resource is
 // closed all week.

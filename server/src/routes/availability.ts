@@ -35,9 +35,9 @@ const availabilityQuerySchema = withDateRangeRules(
 export const availabilityRouter = Router({ mergeParams: true });
 
 // The free start times for one service on one resource. The answer is a
-// hint, not a promise: two people can see the same free slot, and in Week 3
-// the bookings exclusion constraint decides who gets it. Members only in
-// Week 2 (public availability for guests is a Week 3 decision).
+// hint, not a promise: two people can see the same free slot, and the
+// bookings exclusion constraint decides who gets it (D-032, D-033). Members
+// only; public availability for guests is a Week 4 planning question.
 availabilityRouter.get(
   '/',
   async (req: Request, res: Response): Promise<void> => {
