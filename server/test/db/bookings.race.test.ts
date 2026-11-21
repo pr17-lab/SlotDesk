@@ -1,22 +1,13 @@
-// Layer 1 database race test (Step 3b, D-016).
+// Layer 1 database race test (D-016).
 //
-// Proves that the database exclusion constraint `bookings_no_overlap` prevents
-// double booking under genuine concurrent load, without any application-level
-// availability pre-check.
+// Proves that the exclusion constraint `bookings_no_overlap` stops double
+// booking under real concurrent load, with no application-level pre-check.
 //
-// Design: 30 clients all try to INSERT a confirmed booking for the same slot
-// at the same time. The D-012 transaction shape is used: lock the resource row
-// first (FOR UPDATE) so that simultaneous inserts queue behind a single lock
-// rather than deadlocking against each other. The exclusion constraint then
-// lets exactly one INSERT commit and rejects every other with error 23P01.
-//
-// The test repeats this for 20 rounds (different slots) so we are not testing
-// a one-off fluke.
-//
-// Why the test would fail without the constraint: without bookings_no_overlap,
-// every INSERT would succeed because there is nothing to enforce uniqueness of
-// the booked interval. All 30 connections would commit in every round. The
-// per-round assertion (exactly 1 committed) would immediately fail.
+// 30 clients all INSERT a confirmed booking for the same slot at once, for 20
+// rounds. They use the D-012 transaction shape: lock the resource row first
+// (FOR UPDATE) so inserts queue instead of deadlocking. The constraint then
+// lets exactly one INSERT commit and rejects the rest with 23P01. Without the
+// constraint all 30 would commit and the per-round check would fail.
 
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -41,23 +32,19 @@ import {
 const CONNECTIONS = 30;
 const ROUNDS = 20;
 
-// Checks TEST_DATABASE_URL exists and names a _test database (checks 1 and 2).
 const { url, createClient } = requireTestDatabase();
 
 let setupClient: pg.Client;
 let orgId: bigint;
 let resourceId: bigint;
 let serviceId: bigint;
-// Race clients are opened inside the test so we can close them in finally.
 let raceClients: pg.Client[] = [];
 
-// Slots start at 2027-01-01 00:00Z and step by 1 hour per round so no two
-// rounds overlap.
+// One hour per round, so no two rounds overlap.
 const SLOT_BASE = '2027-01-01T00:00:00Z';
 
 beforeAll(async () => {
   setupClient = createClient();
-  // Check 3: verify the live database name ends in _test before any writes.
   await connectAndVerify(setupClient);
 
   orgId = await insertOrg(setupClient, 'Race Test Org');
@@ -66,7 +53,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Always close race clients even if the test threw.
   await endClients(raceClients);
   await truncateTables(setupClient);
   await setupClient.end();
@@ -99,9 +85,7 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
       raceClients,
       async (client) => {
         try {
-          // Lock the resource row before inserting. This prevents deadlocks
-          // between simultaneous inserts; it does not decide who gets the slot.
-          // The exclusion constraint does that.
+          // The lock only prevents deadlocks. The constraint decides the winner.
           await client.query<{ id: string }>(
             'SELECT id FROM resources WHERE org_id = $1 AND id = $2 FOR UPDATE',
             [orgId, resourceId],
@@ -114,8 +98,7 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
                VALUES ($1, $2, $3, $4, $5, 'confirmed', 'Race Bot', 'race@example.com')`,
             [orgId, resourceId, serviceId, startsAt, endsAt],
           );
-          // The INSERT succeeded -- commit immediately so blocked losers
-          // can proceed. Do not wait for other clients.
+          // Commit at once so the blocked losers can proceed.
           await client.query('COMMIT');
           return {
             result: 'committed',
@@ -129,7 +112,6 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
               constraint: err.constraint ?? null,
             } satisfies AttemptOutcome;
           }
-          // Unknown error type -- surface it.
           throw err;
         }
       },
@@ -151,9 +133,8 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
     total23P01 += error23P01.length;
     totalOther += other.length;
 
-    // Per-round assertion: exactly one winner, every other outcome is 23P01
-    // on the bookings_no_overlap constraint. Anything else -- including
-    // 40P01 (deadlock) -- is a failure.
+    // Exactly one winner; everything else must be 23P01 on
+    // bookings_no_overlap. Anything else, including 40P01 (deadlock), fails.
     expect(
       committed.length,
       `Round ${round}: expected exactly 1 committed, got ${committed.length}. Outcomes: ${JSON.stringify(outcomes)}`,
@@ -165,7 +146,6 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
     ).toBe(0);
   }
 
-  // Post-run audit queries via the setup client.
   const countResult = await setupClient.query<{ count: string }>(
     "SELECT COUNT(*) AS count FROM bookings WHERE status = 'confirmed'",
   );
@@ -176,7 +156,6 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
     `Expected exactly ${ROUNDS} confirmed bookings after ${ROUNDS} rounds, got ${confirmedCount}`,
   ).toBe(ROUNDS);
 
-  // One confirmed row per slot: group by slot and check each has count 1.
   const perSlotResult = await setupClient.query<{
     starts_at: Date;
     cnt: string;
@@ -188,7 +167,6 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
     `Found slots with more than one confirmed booking: ${JSON.stringify(perSlotResult.rows)}`,
   ).toBe(0);
 
-  // Zero overlapping pairs of confirmed bookings (self-join with tstzrange &&).
   const overlapResult = await setupClient.query<{ cnt: string }>(
     `SELECT COUNT(*) AS cnt
        FROM bookings a
@@ -213,8 +191,8 @@ it('exclusion constraint prevents double booking under 30 concurrent connections
       ? ((sortedSpread[mid - 1]! + sortedSpread[mid]!) / 2).toFixed(2)
       : sortedSpread[mid]!.toFixed(2);
 
-  // Deliberate test output only. The pino logger is silent under NODE_ENV=test,
-  // and assertion messages appear only on failure.
+  // Printed on purpose: pino is silent under test and assertion messages
+  // show only on failure.
   process.stdout.write(
     `[race] connections=${CONNECTIONS} rounds=${ROUNDS} ` +
       `committed=${totalCommitted} 23P01=${total23P01} other=${totalOther} ` +

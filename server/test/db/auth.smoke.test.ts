@@ -1,13 +1,7 @@
-// Better Auth smoke test (Step 5b, D-021, D-025, D-029).
-//
-// Proves that sign-up and session lookup work through the mounted handler and
-// that the identity rows land in the tables created by our own migration.
-// The Step 5c checklist tests (cookie attributes, sign-out, cross-origin,
-// reset route, token storage) are not here.
-//
-// Loading the app against the test database (guard on TEST_DATABASE_URL,
-// point DATABASE_URL at it, dynamic import, verify current_database()) is
-// shared with the other database test files in loadAppOnTestDatabase().
+// Better Auth smoke test (D-021, D-025, D-029): sign-up and session lookup
+// work through the mounted handler, and the identity rows land in the tables
+// from our own migration. Cookie, origin and reset checks are in
+// auth.checklist.test.ts.
 
 import pg from 'pg';
 import request from 'supertest';

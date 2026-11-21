@@ -1,16 +1,11 @@
-// Layer 3 mutation proof (Step 3b, D-016).
+// Layer 3 mutation proof (D-016).
 //
-// This test is expected to show double booking; it proves the harness can
-// detect it. Without a database-level constraint, a naive application-level
-// "check then insert" is not safe under concurrency. Two connections can both
-// read "no conflict" and then both insert, producing overlapping rows.
+// This test is expected to show double booking, which proves the race harness
+// can catch it. On a scratch table with no exclusion constraint, a "check then
+// insert" lets two connections both see no conflict and both insert.
 //
-// The test uses a scratch schema with no exclusion constraint. If the harness
-// cannot produce multiple winners in any round, the assertion fails -- we do
-// NOT weaken it; that outcome must be reported as a finding.
-//
-// If this test ever fails, the harness has stopped racing. Fix the harness;
-// never loosen the assertion.
+// If it ever fails, the harness has stopped racing. Fix the harness; never
+// loosen the assertion.
 
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -26,25 +21,20 @@ import {
 const CONNECTIONS = 30;
 const ROUNDS = 20;
 
-// Checks TEST_DATABASE_URL exists and names a _test database (checks 1 and 2).
 const { url, createClient } = requireTestDatabase();
 
 let setupClient: pg.Client;
-// Race clients are opened inside the test so they can be closed in finally.
 let raceClients: pg.Client[] = [];
 
-// Same scheme as the race test: 1-hour slots starting 2027-06-01 00:00Z,
-// offset from the race test's range so the two tests never share slots.
+// 1-hour slots, on a different day from the race test.
 const SLOT_BASE = '2027-06-01T00:00:00Z';
 
 beforeAll(async () => {
   setupClient = createClient();
-  // Check 3: verify the live database name ends in _test before any writes.
   await connectAndVerify(setupClient);
 
-  // Create the scratch schema and unguarded table.
-  // The schema is dropped first so a crashed previous run leaves no debris.
-  // This touches only race_scratch, never the real application tables.
+  // Dropped first so a crashed earlier run leaves nothing behind. Only
+  // race_scratch is touched, never the real tables.
   await setupClient.query('DROP SCHEMA IF EXISTS race_scratch CASCADE');
   await setupClient.query('CREATE SCHEMA race_scratch');
   await setupClient.query(`
@@ -62,9 +52,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Always close race clients even if the test threw.
   await endClients(raceClients);
-  // Drop the scratch schema so nothing lingers in the test database.
   await setupClient.query('DROP SCHEMA IF EXISTS race_scratch CASCADE');
   await setupClient.end();
 });
@@ -72,7 +60,6 @@ afterAll(async () => {
 it('naive SELECT-then-INSERT lets multiple connections double-book the same slot', async () => {
   raceClients = await openClients(url, CONNECTIONS);
 
-  // Use a fixed resource_id; the scratch table has no FK so any value works.
   const resourceId = 1n;
 
   let totalCommitted = 0;
@@ -88,9 +75,8 @@ it('naive SELECT-then-INSERT lets multiple connections double-book the same slot
       raceClients,
       async (client) => {
         try {
-          // Naive application check: does a confirmed overlapping row exist?
-          // Under concurrent load, two connections can both see "no row"
-          // and both proceed to INSERT -- the race condition we are proving.
+          // The naive check: two connections can both see no overlap here
+          // and both go on to INSERT.
           const conflict = await client.query<{ cnt: string }>(
             `SELECT COUNT(*) AS cnt
                FROM race_scratch.bookings_unguarded
@@ -152,7 +138,6 @@ it('naive SELECT-then-INSERT lets multiple connections double-book the same slot
     }
   }
 
-  // Audit: find overlapping pairs of confirmed rows in the scratch table.
   const overlapResult = await setupClient.query<{ cnt: string }>(
     `SELECT COUNT(*) AS cnt
        FROM race_scratch.bookings_unguarded a
@@ -174,8 +159,8 @@ it('naive SELECT-then-INSERT lets multiple connections double-book the same slot
       ? ((sortedSpread[mid - 1]! + sortedSpread[mid]!) / 2).toFixed(2)
       : sortedSpread[mid]!.toFixed(2);
 
-  // Deliberate test output only. The pino logger is silent under NODE_ENV=test,
-  // and assertion messages appear only on failure.
+  // Printed on purpose: pino is silent under test and assertion messages
+  // show only on failure.
   process.stdout.write(
     `[mutation] connections=${CONNECTIONS} rounds=${ROUNDS} ` +
       `committed=${totalCommitted} rejected-by-check=${totalRejectedByCheck} ` +
@@ -183,10 +168,7 @@ it('naive SELECT-then-INSERT lets multiple connections double-book the same slot
       `spreadMs min=${minSpread} median=${medianSpread} max=${maxSpread}\n`,
   );
 
-  // The harness must demonstrate at least one round where more than one
-  // client committed -- proving application-level checks are not safe.
-  // If this assertion fails, the double-booking race did not trigger:
-  // report it as a finding rather than weakening the assertion.
+  // At least one round must have more than one winner.
   expect(
     roundsWithMultipleWinners,
     `Expected at least one round with multiple committed outcomes, got 0. ` +

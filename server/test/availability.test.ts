@@ -1,6 +1,5 @@
-// Steps 9a, 9d, 10c and 10e: the time zone check, local time to UTC, free
-// slots, the booking start check and the booking list's local-day range.
-// Unit tests, no database.
+// The time zone check, local time to UTC, free slots, the booking start check
+// and the booking list's local-day range. Unit tests, no database.
 import { describe, expect, it } from 'vitest';
 import { Temporal } from 'temporal-polyfill';
 import {
@@ -54,8 +53,8 @@ describe('the library error', () => {
   });
 });
 
-// Step 9d: slots. Every expected value was computed by the architect with
-// temporal-polyfill 1.0.8 and cross-checked with Python's zoneinfo.
+// Slots. Expected values were computed with temporal-polyfill and
+// cross-checked with Python's zoneinfo.
 
 const INDIA = 'Asia/Kolkata';
 const NEW_YORK = 'America/New_York';
@@ -381,10 +380,8 @@ describe('bookingSearchRange', () => {
   });
 });
 
-// localDaysToUtcRange (Step 10e): the exact UTC range [start, end) of the
-// local dates from `from` to `to`. Expected values computed with
-// temporal-polyfill 1.0.8 on Node 24.22.3 and agree with Python's zoneinfo
-// (architect, 2026-11-20).
+// localDaysToUtcRange: the exact UTC range [start, end) of the local dates from
+// `from` to `to`. Expected values cross-checked with Python's zoneinfo.
 describe('localDaysToUtcRange', () => {
   it.each([
     // +05:30 all year: the local day starts at 18:30Z the UTC day before.
@@ -466,10 +463,8 @@ describe('localDaysToUtcRange', () => {
   });
 });
 
-// bookableSlot (Step 10c): a start is accepted exactly when availableSlots
-// would offer it, with no bookings. The expected UTC instants were computed
-// with temporal-polyfill 1.0.8 on Node 24.22.3 and agree with Python's
-// zoneinfo (architect, 2026-11-19).
+// bookableSlot: a start is accepted exactly when availableSlots would offer it,
+// with no bookings. Expected instants cross-checked with Python's zoneinfo.
 function bookable(input: {
   timeZone: string;
   windows: Window[];

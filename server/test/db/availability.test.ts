@@ -1,4 +1,4 @@
-// Step 9d: the availability route through the real app on the test database
+// The availability route through the real app on the test database
 // (D-032). Covers the session check (401), GET without an Origin, the slots
 // for members (owner and staff), the current time, confirmed and cancelled
 // bookings, the wide booking search range, validation (400), unknown and

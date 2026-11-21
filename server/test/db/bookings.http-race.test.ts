@@ -1,29 +1,20 @@
-// Layer 2 HTTP race test (Step 10d, D-016, D-033).
+// Layer 2 HTTP race test (D-016, D-033).
 //
 // Sends 10 simultaneous requests to POST /api/orgs/:orgId/bookings, over 20
 // rounds, through the real app on a real port. Two shapes:
 //
-// 1. Identical slot: all 10 requests ask for the same start. Exactly one
-//    gets 201 and the other nine get 409. This is the "no double booking"
-//    proof over HTTP: the bookings_no_overlap constraint decides the winner.
+// 1. Identical slot: all 10 ask for the same start. Exactly one gets 201 and
+//    the other nine get 409. The bookings_no_overlap constraint decides.
 //
-// 2. Staggered: the 10 starts are 15 minutes apart and the service lasts
-//    60 minutes, so each request overlaps its neighbours. Every answer must
-//    be 201 or 409, never a 5xx. This is the proof that the resource-row
-//    lock in createBooking works: without it, overlapping inserts can
-//    deadlock (40P01), which the error handler answers with 503 (D-033 D).
-//    Measured on PostgreSQL 16 before this test was written: without the
-//    lock, 503s in 3 to 8 of the 20 rounds on every run; with it, none. The
-//    identical-slot shape gave no deadlocks without the lock, so only the
-//    staggered shape can catch a missing lock.
+// 2. Staggered: the starts are 15 minutes apart and the service lasts 60, so
+//    each request overlaps its neighbours. Every answer must be 201 or 409,
+//    never 5xx. This proves the resource-row lock in createBooking: without
+//    it, overlapping inserts can deadlock (40P01), which becomes a 503
+//    (D-033 D). Only this shape can catch a missing lock.
 //
-// Why one server on a real port and fetch, not supertest: supertest's
-// request(app) starts a new server for every request. Here all requests go
-// to one server, as in production. fetch is built into Node 24, so no new
-// dependency is needed.
-//
-// Why 10 requests: the app's pool has 10 connections (the pg-pool default),
-// so every request can hold its own connection at the same time (D-033).
+// One server and fetch instead of supertest, because supertest starts a new
+// server per request. 10 requests, because the app's pool has 10 connections,
+// so each request can hold its own (D-033).
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import pg from 'pg';

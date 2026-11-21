@@ -1,4 +1,4 @@
-// Step 9a: resources routes through the real app on the test database
+// Resources routes through the real app on the test database
 // (D-032). Covers the session check (401), the origin check (403), create,
 // the owner-only role check (403), validation (400), rename, list and view,
 // and isolation between organizations (404 identical to an unknown one).

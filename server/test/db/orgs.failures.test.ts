@@ -1,4 +1,4 @@
-// Step 6b failure paths (D-030):
+// Failure paths (D-030):
 //   1. The create transaction leaves no organization behind when the owner
 //      membership insert fails, and returns its client to the pool.
 //   2. A database failure under the session check returns 500 and never

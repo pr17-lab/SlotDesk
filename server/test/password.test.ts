@@ -1,4 +1,4 @@
-// Unit tests for our password hashing (src/password.ts, D-031, Step 7d).
+// Unit tests for our password hashing (src/password.ts, D-031).
 // No database. Test passwords are made up and never printed: every check
 // compares a boolean or uses toMatch.
 import { scryptSync } from 'node:crypto';

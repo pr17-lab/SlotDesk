@@ -1,4 +1,4 @@
-// Database rule tests for the services table (Step 9b, D-032).
+// Database rule tests for the services table (D-032).
 // Each test proves one database rule on a direct connection, without the API.
 // Uses TEST_DATABASE_URL only, never DATABASE_URL (D-016).
 import pg from 'pg';
