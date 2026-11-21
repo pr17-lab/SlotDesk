@@ -13,21 +13,16 @@ import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { localDate, withDateRangeRules } from './date-range.js';
 
-// IDs in the body are checked like IDs in a URL. A malformed one is a 400,
-// because it is a body value, not a path segment (like serviceId in the
-// availability query).
+// Body IDs get the same check as URL IDs, but a bad one is a 400 here
+// because it's input, not a path.
 const idSchema = z.string().refine(isValidId, { message: 'Not a valid id' });
 
-// An exact instant with an offset or Z, for example 2099-01-05T03:30:00Z or
-// 2099-01-05T09:00:00+05:30. Without an offset a time would mean nothing,
-// so it is refused.
+// An exact instant with an offset or Z, like 2099-01-05T09:00:00+05:30. A
+// time with no offset doesn't pin down an instant, so we refuse it.
 //
-// Why the year bounds: the same 2000 to 2099 limit as the availability
-// dates. Zod accepts years 0000 to 9999, and a booking that starts late on
-// 9999-12-31 ends in year 10000, which temporal-polyfill writes as
-// +010000-..., a string PostgreSQL refuses (a 500; Step 9d finding).
-// Comparing the first four characters works because the format check has
-// already passed, and `abort: true` makes sure of that order.
+// Years are kept to 2000-2099, like availability dates: a booking late on
+// 9999-12-31 would end in year 10000, which PostgreSQL refuses. `abort: true`
+// makes the format check run first, so slicing the year is safe.
 const startsAtSchema = z.iso
   .datetime({ offset: true, abort: true })
   .refine(
@@ -35,14 +30,13 @@ const startsAtSchema = z.iso
     { message: 'Year must be between 2000 and 2099' },
   );
 
-// Trimmed first, then checked. Why pipe (Tested, Zod 4.6.7): checks run in
-// the order written, so z.email().trim() checks the format before trimming
-// and refuses " guest@example.com ". 254 characters is the longest address
-// that fits in an SMTP path.
+// Trim first, then check: z.email().trim() would check the format before
+// trimming and refuse " guest@example.com ". 254 is the longest address
+// email allows.
 const customerEmailSchema = z.string().trim().pipe(z.email().max(254));
 
-// Strict, so an unknown or misspelt key is a 400. The organization never
-// comes from the body (D-030).
+// Strict, so a misspelt key is a 400. The organization never comes from the
+// body.
 const createBookingSchema = z.strictObject({
   resourceId: idSchema,
   serviceId: idSchema,
@@ -51,11 +45,8 @@ const createBookingSchema = z.strictObject({
   customerEmail: customerEmailSchema,
 });
 
-// The booking list query. Strict, like the availability query, so an
-// unknown key is a 400. resourceId is required: a list is always for one
-// resource, because from and to are local dates in that resource's time
-// zone. The from and to rules are the availability route's, from
-// date-range.ts (D-033).
+// resourceId is required because from and to are local dates in that
+// resource's time zone. The date rules are shared with availability.
 const listBookingsQuerySchema = withDateRangeRules(
   z.strictObject({
     resourceId: idSchema,
@@ -64,15 +55,12 @@ const listBookingsQuerySchema = withDateRangeRules(
   }),
 );
 
-// No mergeParams: this router reads the organization only from
-// res.locals.membership (set by requireMembership in orgRouter).
+// No mergeParams: the organization comes from res.locals.membership.
 export const bookingsRouter = Router();
 
-// Owner and staff can both book (D-033 A: staff run the front desk), so
-// there is no requireOwner here.
+// Owner and staff can both book; staff run the front desk.
 bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  // safeParse, not parse: req.body is undefined when no JSON body was sent,
-  // and that must be a 400, not a 500.
+  // safeParse, because a missing body must be a 400, not a 500.
   const parsed = createBookingSchema.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
@@ -84,14 +72,13 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     new Date(),
   );
   if (result.status === 'notFound') {
-    // The same 404 for a missing resource or service and for one in
-    // another organization (D-030).
+    // Same 404 whether it doesn't exist or belongs to another organization.
     notFoundHandler(req, res);
     return;
   }
   if (result.status === 'notOffered') {
-    // The same shape as a validation error, with its own message, so a
-    // client (and a test) can tell it apart from a malformed start.
+    // Shaped like a validation error, with its own message so a client can
+    // tell it apart from a malformed start.
     res.status(400).json({
       error: 'Bad Request',
       details: [
@@ -103,9 +90,8 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   res.status(201).json(result.booking);
 });
 
-// The bookings of one resource that start on the local dates from `from` to
-// `to` (both included, at most 14 days), confirmed and cancelled, oldest
-// first (D-033). Owner and staff.
+// A resource's bookings that start on the local dates `from` to `to`,
+// confirmed and cancelled, oldest first.
 bookingsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   // shortcut: no pagination on the booking list; the 14-day limit keeps it small, add pagination if a resource can have hundreds of bookings in two weeks
   const parsed = listBookingsQuerySchema.safeParse(req.query);
@@ -116,16 +102,13 @@ bookingsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   const { resourceId, from, to } = parsed.data;
   const orgId = res.locals.membership.orgId;
 
-  // The resource lookup is what keeps another organization's resource out:
-  // it is filtered on org_id, so org B's resource is a 404 here, identical
-  // to one that does not exist (D-030). It also gives the time zone.
+  // This lookup keeps other organizations out (it filters on org_id) and
+  // gives us the time zone.
   const resource = await getResource(orgId, resourceId);
   if (resource === null) {
     notFoundHandler(req, res);
     return;
   }
-  // The local dates become one exact UTC range in src/availability.ts, the
-  // one place for time zone conversion (D-032).
   const range = localDaysToUtcRange(from, to, resource.timeZone);
   const bookings = await listBookings(
     orgId,
@@ -136,13 +119,12 @@ bookingsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   res.status(200).json(bookings);
 });
 
-// One booking. A malformed ID, an unknown one and another organization's
-// one all get the same 404 (D-030).
+// One booking. Bad, unknown and other-organization IDs all get the same 404.
 bookingsRouter.get(
   '/:bookingId',
   async (req: Request, res: Response): Promise<void> => {
     const bookingId = req.params.bookingId;
-    // A malformed ID is a 404 without a database query.
+    // No point querying for a malformed ID.
     if (!isValidId(bookingId)) {
       notFoundHandler(req, res);
       return;
@@ -156,12 +138,9 @@ bookingsRouter.get(
   },
 );
 
-// Cancels a booking and returns it with status 'cancelled' (D-033). Owner
-// and staff, like booking. POST, not DELETE, because the row stays (it is
-// still listed, with its status); it also means the origin check applies,
-// as for every non-GET route under /api/orgs. Cancelling twice is a 200
-// both times. There is no un-cancel: book the slot again instead. A body,
-// if one is sent, is ignored.
+// Cancels a booking and returns it. POST, not DELETE, because the row stays
+// (it's still listed, as cancelled). Cancelling twice is fine. There's no
+// un-cancel; just book the slot again.
 bookingsRouter.post(
   '/:bookingId/cancel',
   async (req: Request, res: Response): Promise<void> => {

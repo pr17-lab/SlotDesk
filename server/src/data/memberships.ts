@@ -22,9 +22,8 @@ export type Member = {
 };
 
 export async function listMembers(orgId: string): Promise<Member[]> {
-  // Only these four columns: never select anything else from users.
-  // The double quotes keep the capital I: without them PostgreSQL would
-  // return the column as "userid".
+  // Only these four columns; never anything else from users. The double
+  // quotes keep the capital I.
   const result = await pool.query<Member>(
     `SELECT m.user_id AS "userId", u.name, u.email, m.role
      FROM memberships m JOIN users u ON u.id = m.user_id
@@ -40,17 +39,14 @@ export type AddStaffResult =
   | { result: 'unknown-email' }
   | { result: 'already-member' };
 
-// pool.query, not pool.connect(): each step is a single statement, the
-// primary key settles a race between two adds, and pool.query handles
-// connection errors itself (D-014).
+// No transaction needed: each step is one statement, and the primary key
+// settles a race between two adds.
 export async function addStaffMemberByEmail(
   orgId: string,
   email: string,
 ): Promise<AddStaffResult> {
-  // The email is not lowercased here: the route's Zod schema lowercases it,
-  // and Better Auth stores emails lowercased (Verified in better-auth 1.7.18:
-  // sign-up.mjs normalizes the email with toLowerCase(), and
-  // internal-adapter.mjs lowercases it on create and update).
+  // No lowercasing here: the route's schema does it, and Better Auth stores
+  // emails lowercased.
   const user = await pool.query<{ id: string; name: string; email: string }>(
     'SELECT id, name, email FROM users WHERE email = $1',
     [email],
@@ -81,10 +77,8 @@ export async function addStaffMemberByEmail(
   };
 }
 
-// 23505 is PostgreSQL's unique_violation. Only the primary key means
-// "already a member"; any other constraint is a real error and is rethrown.
-// pg turns every error PostgreSQL sends back into a pg.DatabaseError,
-// which carries the error code and the constraint name.
+// 23505 is a unique violation. Only the primary key means "already a
+// member"; any other constraint is a real error, so we rethrow it.
 function isDuplicateMembership(err: unknown): boolean {
   return (
     err instanceof pg.DatabaseError &&
@@ -97,8 +91,7 @@ export async function removeStaffMember(
   orgId: string,
   userId: string,
 ): Promise<'removed' | 'is-owner' | 'not-member'> {
-  // AND role = 'staff' is what stops the owner ever being removed: the
-  // owner's row never matches this DELETE.
+  // AND role = 'staff' is what keeps the owner from ever being removed.
   const result = await pool.query(
     "DELETE FROM memberships WHERE org_id = $1 AND user_id = $2 AND role = 'staff' RETURNING user_id",
     [orgId, userId],

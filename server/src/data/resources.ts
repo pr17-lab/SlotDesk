@@ -2,12 +2,7 @@ import { pool } from '../db.js';
 
 export type Resource = { id: string; name: string; timeZone: string };
 
-// Every function here is a single pool.query, not pool.connect(), so the
-// D-014 listener rule does not apply: pool.query handles connection errors
-// itself.
-//
-// In each query, the double quotes in "timeZone" keep the capital Z: without
-// them PostgreSQL would return the column as "timezone".
+// The double quotes in "timeZone" keep the capital Z.
 
 export async function createResource(
   orgId: string,

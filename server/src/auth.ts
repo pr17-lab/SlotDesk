@@ -1,11 +1,8 @@
-// Better Auth configuration (D-021, D-029).
+// Better Auth configuration (D-029).
 //
-// Why the name mapping: our tables are snake_case and plural, and `user` is a
-// reserved word in PostgreSQL, so each library model and camelCase field is
-// mapped to our own table and column names below.
-//
-// The identity tables are created by our own node-pg-migrate migrations,
-// never by the Better Auth CLI's `migrate` command.
+// Our tables are snake_case and plural (and `user` is reserved in
+// PostgreSQL), so each library model and field is mapped to our names below.
+// The tables come from our own migrations, never Better Auth's CLI.
 import { betterAuth } from 'better-auth';
 import { config } from './config.js';
 import { pool } from './db.js';
@@ -20,22 +17,17 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 15,
     maxPasswordLength: 128,
-    // Our own scrypt settings, stored in each hash (src/password.ts, D-031).
+    // Our own scrypt settings, stored in each hash (src/password.ts).
     password: { hash: hashPassword, verify: verifyPassword },
   },
   telemetry: { enabled: false },
   advanced: {
-    // Better Auth skips its origin and CSRF checks when NODE_ENV is test or
-    // TEST is set, unless this is set explicitly (better-auth 1.7.18,
-    // dist/context/create-context.mjs). false keeps the checks on in every
-    // environment, including tests and any production process that has TEST
-    // set by mistake. See D-029.
+    // Keep the origin and CSRF checks on everywhere. Without this, Better
+    // Auth turns them off when NODE_ENV is test or TEST is set (D-029).
     disableOriginCheck: false,
-    // Render sits behind Cloudflare. There, x-forwarded-for arrives with more
-    // than one address, and a client can add its own. Better Auth 1.7.18
-    // skips a header with more than one address, and in production it then
-    // puts all visitors into one shared rate-limit bucket. Cloudflare sets
-    // cf-connecting-ip to a single address, so we read only that. See D-031.
+    // Read the client IP only from Cloudflare's cf-connecting-ip. On Render,
+    // x-forwarded-for holds several addresses (one can be forged), and Better
+    // Auth would then put everyone in one rate-limit bucket (D-031).
     ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
   },
   user: {

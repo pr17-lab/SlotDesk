@@ -1,12 +1,11 @@
 import { pool, withTransaction } from '../db.js';
 import type { Role } from './memberships.js';
 
-// IDs stay strings: pg returns bigint as a string, and a JavaScript number
-// loses precision above 2^53.
+// IDs stay strings: a JavaScript number loses precision above 2^53.
 export type OrgWithRole = { id: string; name: string; role: Role };
 
-// The organization and its owner membership are inserted in one transaction,
-// so an organization never exists without an owner (D-030).
+// The organization and its owner go in together, so an organization never
+// exists without an owner.
 export async function createOrganizationWithOwner(
   userId: string,
   name: string,
@@ -41,8 +40,7 @@ export async function listOrganizationsForUser(
 export async function getOrganization(
   orgId: string,
 ): Promise<{ id: string; name: string } | null> {
-  // In the organizations table the organization ID column is `id`; every
-  // other tenant table filters on `org_id = $1`.
+  // Here the organization's ID column is `id`; other tables use `org_id`.
   const result = await pool.query<{ id: string; name: string }>(
     'SELECT id, name FROM organizations WHERE id = $1',
     [orgId],
