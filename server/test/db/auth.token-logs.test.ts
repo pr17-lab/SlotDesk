@@ -1,15 +1,9 @@
-// Step 5 checklist: the session token must never be logged, even when the
-// database fails underneath a request (docs/trade-off-record.md 4.1, D-029).
-//
-// Two scenarios, each against a real signed-in session:
-//   1. Query failure -- the sessions.token column is renamed out from under
-//      a running app, so any query that reads it fails.
-//   2. Connection failure -- the app's own pool is ended, so every query
-//      rejects immediately.
-// In both, GET /api/auth/get-session and POST /api/auth/sign-out are called
-// with the valid cookie, and everything written to console, to the process
-// streams, and to our pino logger during those two calls is scanned for the
-// raw token.
+// The session token must never be logged, even when the database fails under
+// a request (docs/trade-off-record.md 4.1, D-029). Two scenarios, each with a
+// real signed-in session: (1) the sessions.token column is renamed, so
+// queries fail; (2) the app's pool is ended, so every query rejects.
+// In both, get-session and sign-out are called with the cookie, and all
+// console, stream and pino output is scanned for the raw token.
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -61,8 +55,8 @@ it('never logs the session token when the database fails underneath get-session 
   let scenario2: { getSessionStatus: number; signOutStatus: number };
 
   try {
-    // Scenario 1: query failure. Rename the column with a SEPARATE client
-    // (not the app's pool), then restore it in a finally block.
+    // Scenario 1: rename the column with a separate client, not the app's
+    // pool, and restore it in finally.
     await client.query(
       'ALTER TABLE sessions RENAME COLUMN token TO token_renamed',
     );
@@ -87,10 +81,9 @@ it('never logs the session token when the database fails underneath get-session 
       signOutStatus: signOutRes.status,
     };
     expect(getSessionRes.status).not.toBe(200);
-    // Documents Better Auth's fail-open sign-out: sign-out.mjs catches
-    // database errors, clears the cookie and returns success while the
-    // session row survives. Accepted under D-029 risk A. If this fails, the
-    // library changed; report it.
+    // Better Auth's sign-out fails open: it catches the database error and
+    // returns success while the session row survives (D-029 risk A). If this
+    // fails, the library changed.
     expect(signOutRes.status).toBe(200);
     expect(getSessionRes.text.includes(rawToken)).toBe(false);
     expect(signOutRes.text.includes(rawToken)).toBe(false);
@@ -112,8 +105,7 @@ it('never logs the session token when the database fails underneath get-session 
     expect(afterScenario1.status).toBe(200);
     expect(afterScenario1.body?.user?.email).toBe(email);
 
-    // Scenario 2: connection failure. End the app's own pool, then make
-    // the same two requests against it.
+    // Scenario 2: end the app's pool, then make the same two requests.
     const scenario2Start = captured.length;
     await pool.end();
     poolEnded = true;
@@ -135,9 +127,8 @@ it('never logs the session token when the database fails underneath get-session 
     expect(getSessionRes2.text.includes(rawToken)).toBe(false);
     expect(signOutRes2.text.includes(rawToken)).toBe(false);
 
-    // Checked with the separate client, since the app's pool is ended.
-    // Found by the user, not by the token.
-    // Sign-up signs the user in automatically, so the user has more than one session.
+    // Uses the separate client, since the app's pool is ended. Sign-up also
+    // signs in, so find the session by the cookie's token.
     const sessionsAfterScenario2 = await client.query<{ token: string }>(
       `SELECT s.token FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE u.email = $1`,
@@ -159,12 +150,9 @@ it('never logs the session token when the database fails underneath get-session 
 
     spies.restore();
 
-    // Summary lines: counts only, per requirement 25. If either scenario
-    // produced zero captured lines, Better Auth logged nothing for it --
-    // requirement 26 says the test still passes, and that is recorded here.
-    // process.stdout.write (not console.log) because Vitest's default
-    // reporter only surfaces console output for failing tests; the other
-    // database test files use the same pattern for their summary lines.
+    // Counts only. Zero captured lines is fine: Better Auth just logged
+    // nothing. process.stdout.write because Vitest only shows console output
+    // for failing tests.
     process.stdout.write(
       `[token-logs] scenario 1 (query failure): lines=${scenario1Texts.length} ` +
         `betterAuthLines=${scenario1BetterAuthLines} ` +

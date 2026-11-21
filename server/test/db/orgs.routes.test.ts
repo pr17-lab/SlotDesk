@@ -1,4 +1,4 @@
-// Step 6b: organization routes through the real app on the test database
+// Organization routes through the real app on the test database
 // (D-030). Covers the session check (401), our own origin check (403),
 // create, list and view, tenant isolation (404), validation (400), the body
 // limit (413) and that the session check never refreshes the session.

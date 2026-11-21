@@ -1,4 +1,4 @@
-// Step 6c: organization members through the real app on the test database
+// Organization members through the real app on the test database
 // (D-030). Covers the session check (401), the origin check (403), list, add
 // and remove, the owner-only role check (403), the duplicate-add race, and
 // isolation between organizations (404 identical to an unknown route).

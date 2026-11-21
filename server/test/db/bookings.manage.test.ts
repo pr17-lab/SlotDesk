@@ -1,4 +1,4 @@
-// Step 10e: listing, viewing and cancelling bookings through the real app on
+// Listing, viewing and cancelling bookings through the real app on
 // the test database (D-033). Covers the session and origin checks (401,
 // 403), owner and staff access, the list's local-date range (the resource's
 // time zone, `to` included), validation (400), and isolation between

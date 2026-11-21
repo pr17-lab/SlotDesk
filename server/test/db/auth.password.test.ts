@@ -1,4 +1,4 @@
-// Password hashing through the real app (D-031, Step 7d): the stored format,
+// Password hashing through the real app (D-031): the stored format,
 // sign-in with right and wrong passwords, and a corrupt stored hash.
 // Passwords, hashes and cookies are never printed: every check compares a
 // boolean, a status, a count or uses toMatch.

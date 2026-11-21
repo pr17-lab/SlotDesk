@@ -1,4 +1,4 @@
-// Step 9c: working-hours routes through the real app on the test database
+// Working-hours routes through the real app on the test database
 // (D-032). Covers the session check (401), the origin check (403), GET, PUT
 // (replaces the whole week), the owner-only role check (403), validation
 // (400), unknown and malformed IDs (404), and isolation between

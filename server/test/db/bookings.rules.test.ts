@@ -1,4 +1,4 @@
-// Database rule tests for the bookings table (Step 3a, D-026).
+// Database rule tests for the bookings table (D-026).
 // Each test proves one database constraint using a real PostgreSQL connection.
 // Tests commit for real; tenant tables are truncated after this file runs.
 // Uses TEST_DATABASE_URL only — never DATABASE_URL (D-016).
@@ -17,21 +17,13 @@ import {
   truncateTables,
 } from './helpers/db-guard.js';
 
-// ── Guard ────────────────────────────────────────────────────────────────────
-// Validates TEST_DATABASE_URL and the database name before any connection.
-// Throws immediately if the URL is missing or points at a non-test database.
 const { createClient } = requireTestDatabase();
 
-// ── Shared state ─────────────────────────────────────────────────────────────
-// One client for the whole file; each test helper function gets its own
-// short-lived client for concurrent-connection tests.
 let client: pg.Client;
 let orgId: bigint;
 let resourceId: bigint;
 let resource2Id: bigint;
 let serviceId: bigint;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 // Insert a confirmed booking and return its id.
 async function insertBooking(
@@ -64,15 +56,12 @@ async function insertBooking(
   return BigInt(r.rows[0]!.id);
 }
 
-// ── Setup / teardown ─────────────────────────────────────────────────────────
-
 beforeAll(async () => {
   client = createClient();
-  // Check 3: verify the live database name ends in _test before any writes.
   await connectAndVerify(client);
 
-  // Each test file creates its own org and resources so files cannot
-  // interfere with one another even when running serially (D-016).
+  // Each file makes its own org and resources so files cannot affect each
+  // other (D-016).
   orgId = await insertOrg(client, 'Rules Test Org');
   resourceId = await insertResource(client, orgId, 'Room A');
   resource2Id = await insertResource(client, orgId, 'Room B');
@@ -80,18 +69,14 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Truncate all tenant tables so the next file starts from a clean state.
   await truncateTables(client);
   await client.end();
 });
 
-// Clean up bookings between tests so each test starts with an empty bookings
-// table but keeps the same org and resources (faster than re-inserting them).
+// Each test starts with no bookings but keeps the org and resources.
 beforeEach(async () => {
   await client.query('TRUNCATE bookings RESTART IDENTITY');
 });
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('bookings constraint tests', () => {
   // a. An overlapping confirmed booking is rejected.
@@ -146,7 +131,6 @@ describe('bookings constraint tests', () => {
       '2026-11-10 10:00Z',
       '2026-11-10 11:00Z',
     );
-    // Should succeed — no error expected.
     await insertBooking(
       client,
       orgId,
@@ -166,7 +150,6 @@ describe('bookings constraint tests', () => {
       '2026-11-10 11:00Z',
       'cancelled',
     );
-    // Should succeed — cancelled booking is excluded from the constraint.
     await insertBooking(
       client,
       orgId,
@@ -179,7 +162,6 @@ describe('bookings constraint tests', () => {
   // e. Setting a cancelled booking back to confirmed, when it now conflicts,
   //    is rejected (23P01).
   it('e: reactivating a cancelled booking into a conflict is rejected (23P01)', async () => {
-    // First booking is confirmed and holds the slot.
     const firstId = await insertBooking(
       client,
       orgId,
@@ -187,7 +169,7 @@ describe('bookings constraint tests', () => {
       '2026-11-10 10:00Z',
       '2026-11-10 11:00Z',
     );
-    // Second booking is inserted as cancelled (no conflict yet).
+    // Same slot, but cancelled, so no conflict yet.
     const cancelledId = await insertBooking(
       client,
       orgId,
@@ -196,14 +178,13 @@ describe('bookings constraint tests', () => {
       '2026-11-10 11:00Z',
       'cancelled',
     );
-    // Confirm the cancelled booking — now it conflicts with the first.
     const err = await expectError(() =>
       client.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1", [
         cancelledId,
       ]),
     );
     expect(err.code).toBe('23P01');
-    // Suppress unused variable lint warning — firstId is intentional.
+    // firstId only holds the slot; this keeps lint quiet.
     void firstId;
   });
 
@@ -224,7 +205,6 @@ describe('bookings constraint tests', () => {
       '2026-11-10 12:00Z',
       '2026-11-10 13:00Z',
     );
-    // Move the second booking so it overlaps the first.
     const err = await expectError(() =>
       client.query(
         "UPDATE bookings SET starts_at = '2026-11-10 10:30Z', ends_at = '2026-11-10 11:30Z' WHERE id = $1",
@@ -266,7 +246,6 @@ describe('bookings constraint tests', () => {
       '2026-11-10 10:00Z',
       '2026-11-10 11:00Z',
     );
-    // Should succeed — different resource_id means no conflict.
     await insertBooking(
       client,
       orgId,
@@ -279,13 +258,9 @@ describe('bookings constraint tests', () => {
   // i. A booking whose org_id differs from its resource's org_id is rejected
   //    by the composite foreign key (23503).
   it('i: booking with mismatched org_id is rejected (23503)', async () => {
-    // Create a second org and put resource2Id-equivalent in that org so we can
-    // try to use it with a different org_id.
     const otherOrgId = await insertOrg(client, 'Other Org');
 
-    // Try to insert a booking claiming orgId but pointing at a resource that
-    // belongs to otherOrgId — use a fake resource_id in otherOrgId context.
-    // Simpler: insert booking with otherOrgId but resourceId (which belongs to orgId).
+    // The booking claims otherOrgId, but resourceId belongs to orgId.
     const err = await expectError(() =>
       insertBooking(
         client,
@@ -295,7 +270,6 @@ describe('bookings constraint tests', () => {
         '2026-11-10 11:00Z',
       ),
     );
-    // The composite FK (org_id, resource_id) → resources(org_id, id) fails.
     expect(err.code).toBe('23503');
   });
 
@@ -354,7 +328,7 @@ describe('bookings constraint tests', () => {
     expect(err.code).toBe('23502');
   });
 
-  // n. service_id (Step 10b, D-033). Both foreign keys give 23503, so each
+  // n. service_id (D-033). Both foreign keys give 23503, so each
   //    test also checks the constraint name.
   it('n: unknown service_id is rejected (23503, bookings_service_fk)', async () => {
     const err = await expectError(() =>
@@ -413,19 +387,15 @@ describe('bookings constraint tests', () => {
   });
 
   // m. The guard refuses a TEST_DATABASE_URL whose database name does not end
-  //    in _test. This test never connects to any database; it only proves the
-  //    URL check (check 2) fires before any SQL.
+  //    in _test, before any connection is opened.
   it('m: guard refuses a non-test database URL without connecting', () => {
-    // Temporarily override the environment variable for this test only.
     const original = process.env['TEST_DATABASE_URL'];
     process.env['TEST_DATABASE_URL'] =
       'postgresql://user:pass@localhost:5432/slotdesk';
 
     try {
-      // requireTestDatabase() must throw before opening any connection.
       expect(() => requireTestDatabase()).toThrow(/does not end in _test/);
     } finally {
-      // Restore the original value so subsequent tests are unaffected.
       process.env['TEST_DATABASE_URL'] = original;
     }
   });

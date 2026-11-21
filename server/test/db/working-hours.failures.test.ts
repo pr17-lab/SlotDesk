@@ -1,4 +1,4 @@
-// Step 9c: failure tests for replaceWorkingHours (D-032, D-014).
+// Failure tests for replaceWorkingHours (D-032, D-014).
 //   (a) The connection dies inside the replace transaction: the call must
 //       reject without crashing the process, the old week must still be
 //       stored, and the pool must recover.

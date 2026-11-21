@@ -1,10 +1,9 @@
-// Log-capture helpers shared by database test files that check a secret is
-// never logged (moved unchanged from auth.token-logs.test.ts in Step 6b).
+// Log-capture helpers for the database tests that check a secret is never logged.
 import { vi } from 'vitest';
 import { logger } from '../../../src/logger.js';
 
 // Turns a captured console/stream/logger argument into searchable text,
-// including an Error's message, stack and cause chain (requirement 22).
+// including an Error's message, stack and cause chain.
 export function toSearchableText(value: unknown): string {
   if (value instanceof Error) {
     const parts = [value.message, value.stack ?? ''];

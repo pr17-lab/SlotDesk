@@ -1,5 +1,5 @@
 // Shared helper for database-integration test files that exercise the real
-// app through Better Auth (Step 5c, D-029).
+// app through Better Auth (D-029).
 //
 // Why the dynamic import: the app's pool in src/db.ts reads DATABASE_URL at
 // import time, which otherwise points at the development database. We must

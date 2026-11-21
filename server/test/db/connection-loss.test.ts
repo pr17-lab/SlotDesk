@@ -1,12 +1,10 @@
-// Task 6b follow-up: a lost database connection must fail the current
-// request instead of crashing the process.
-//   (a) The connection dies inside the create transaction: the client
-//       checked out by createOrganizationWithOwner emits 'error', which
-//       would crash Node without its own listener.
+// A lost database connection must fail the current request, not crash the
+// process.
+//   (a) The connection dies inside the create transaction: the checked-out
+//       client emits 'error', which crashes Node without its own listener.
 //   (b) An idle pooled connection dies: pg-pool re-emits the error on the
-//       pool, which would crash Node without pool.on('error', ...).
-// Without either fix, Vitest reports an unhandled 'error' event and the run
-// fails.
+//       pool, which crashes Node without pool.on('error', ...).
+// Without either fix, Vitest reports an unhandled 'error' event.
 import pg from 'pg';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { loadAppOnTestDatabase, signUp } from './helpers/auth-app.js';

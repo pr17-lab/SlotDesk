@@ -1,4 +1,4 @@
-// Database rule tests for the memberships table (Step 6a, D-030).
+// Database rule tests for the memberships table (D-030).
 // Each test proves one database rule using a real PostgreSQL connection.
 // Tests commit for real; tables are truncated after this file runs.
 // Uses TEST_DATABASE_URL only — never DATABASE_URL (D-016).
@@ -12,16 +12,11 @@ import {
   truncateTables,
 } from './helpers/db-guard.js';
 
-// ── Guard ────────────────────────────────────────────────────────────────────
-// Validates TEST_DATABASE_URL and the database name before any connection.
 const { createClient } = requireTestDatabase();
 
-// ── Shared state ─────────────────────────────────────────────────────────────
 let client: pg.Client;
 let orgId: string;
 let org2Id: string;
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 // Insert one membership row.
 async function insertMembership(
@@ -46,11 +41,8 @@ async function countRows(
   return Number(r.rows[0]!.count);
 }
 
-// ── Setup / teardown ─────────────────────────────────────────────────────────
-
 beforeAll(async () => {
   client = createClient();
-  // Check 3: verify the live database name ends in _test before any writes.
   await connectAndVerify(client);
 
   const o1 = await client.query<{ id: string }>(
@@ -79,8 +71,6 @@ afterAll(async () => {
 beforeEach(async () => {
   await client.query('TRUNCATE memberships');
 });
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('memberships constraint tests', () => {
   it('a: one owner and two staff in one organization are accepted', async () => {

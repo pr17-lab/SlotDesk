@@ -1,4 +1,4 @@
-// Step 10c: the booking route through the real app on the test database
+// The booking route through the real app on the test database
 // (D-033). Covers the session and origin checks (401, 403), booking by owner
 // and staff, the stored row, the overlap rule (409), the start check (400
 // "not offered"), validation (400), unknown and malformed IDs (404 and 400),

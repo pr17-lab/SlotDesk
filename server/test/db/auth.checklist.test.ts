@@ -1,54 +1,27 @@
-// Step 5 authentication checklist tests (docs/trade-off-record.md 4.1, D-029).
+// Authentication checklist tests (docs/trade-off-record.md 4.1, D-029).
 //
 // Covers checklist items 2, 3, 5, 8, 9 and the http part of item 4, plus the
-// password-reset routes and the password length limits. Item 1 was covered
-// in auth.smoke.test.ts (Step 5b). Items 6, 7 and 10 are out of scope here
-// (deferred to Step 7 / Week 4 per the trade-off record's update note).
+// password-reset routes and the password length limits. Item 1 is in
+// auth.smoke.test.ts.
 //
-// Cross-origin findings (checklist item 5), read from the installed
-// better-auth@1.7.18 source:
+// Cross-origin behaviour in better-auth 1.7.18: every non-GET request that
+// carries a cookie must have an Origin (or Referer) that matches
+// trustedOrigins, else it gets 403. Sign-up and sign-in have no cookie to
+// check, so they also read Fetch Metadata headers and reject a cross-site
+// navigation, which is how an untrusted Origin on sign-in is refused (login
+// CSRF). trustedOrigins defaults to the origin of BETTER_AUTH_URL, and
+// auth.ts does not set it.
 //
-//   node_modules/better-auth/dist/api/middlewares/origin-check.mjs
-//     - `originCheckMiddleware` is mounted globally on every route (path
-//       "/**" in node_modules/better-auth/dist/api/index.mjs). For any
-//       non-GET/OPTIONS/HEAD request it calls `validateOrigin`, which:
-//         * returns immediately (no check) if the request has neither a
-//           `Cookie` header nor `forceValidate` -- so a first sign-up/sign-in
-//           with no cookie is never origin-checked here;
-//         * otherwise requires `Origin` (falling back to `Referer`) to be
-//           present and to match `trustedOrigins`, else throws FORBIDDEN
-//           with code MISSING_OR_NULL_ORIGIN (no origin/referer) or
-//           INVALID_ORIGIN (present but not trusted).
-//     - `formCsrfMiddleware` is additionally mounted on sign-up/email and
-//       sign-in/email (the routes with no cookie to anchor a check). With no
-//       `Cookie` header it reads `Sec-Fetch-Site`/`Mode`/`Dest`: a
-//       cross-site + navigate combination is rejected immediately with
-//       CROSS_SITE_NAVIGATION_LOGIN_BLOCKED; any other Fetch-Metadata value,
-//       or a bare Origin/Referer with no Fetch-Metadata at all, forces the
-//       same validateOrigin check (so an untrusted Origin on a cookie-less
-//       sign-in is also rejected: "login CSRF").
-//     - Default `trustedOrigins` is exactly the origin of BETTER_AUTH_URL
-//       (node_modules/better-auth/dist/context/helpers.mjs,
-//       getTrustedOrigins) -- http://localhost:3000 here, per
-//       vitest.db.config.ts. auth.ts sets no `trustedOrigins` option.
-//
-// Reset-password routes in core 1.7.18 (no organization/SSO/etc. plugins
-// installed), all in node_modules/better-auth/dist/api/routes/password.mjs:
-//   - POST /request-password-reset
-//   - GET  /reset-password/:token   (redirect-based callback)
-//   - POST /reset-password
-// There is no "forget-password" alias in this version's core. All three are
-// exercised below; auth.ts configures no `sendResetPassword`, so D-029's "no
-// reset in the MVP" holds and the request route always answers 400.
+// The core library has three reset routes: POST /request-password-reset,
+// GET /reset-password/:token and POST /reset-password. auth.ts configures no
+// sendResetPassword, so D-029's "no reset in the MVP" holds and the request
+// route always answers 400.
 
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-// Type-only: auth.options is typed as the literal object passed to
-// betterAuth() in src/auth.ts, which omits plugins/secondaryStorage/cookie
-// cache entirely (absent, not merely undefined), so TypeScript rejects
-// reading them off it directly. BetterAuthOptions (exported as a type by
-// the installed better-auth package) is the full options shape and lets
-// this test check that those fields are genuinely absent.
+// Type-only. auth.options is typed as the exact object passed to betterAuth(),
+// which has no plugins, secondaryStorage or cookie cache at all, so TypeScript
+// will not let us read them. BetterAuthOptions is the full shape.
 import type { BetterAuthOptions } from 'better-auth';
 import pg from 'pg';
 import request from 'supertest';
@@ -68,19 +41,16 @@ import {
   truncateTables,
 } from './helpers/db-guard.js';
 
-// The test base URL a browser on this origin would send (vitest.db.config.ts
-// sets BETTER_AUTH_URL to the same value, which is also the library's
-// default trustedOrigins entry).
+// The origin a browser on this app would send. vitest.db.config.ts sets
+// BETTER_AUTH_URL to the same value.
 const TRUSTED_ORIGIN = 'http://localhost:3000';
 const EVIL_ORIGIN = 'https://evil.example';
 
-// Every password below is 15+ characters, the minimum set in src/auth.ts.
-// Never printed by this file.
+// 15+ characters, the minimum set in src/auth.ts. Never printed.
 const PASSWORD = 'checklist-pw-15chars';
 
-// The origin check is on in these tests, under Vitest's normal test mode,
-// because src/auth.ts sets advanced.disableOriginCheck to false (D-029).
-// Without that, Better Auth would skip the check whenever it detects a test.
+// The origin check stays on under Vitest because src/auth.ts sets
+// advanced.disableOriginCheck to false (D-029).
 const { app, pool, auth } = await loadAppOnTestDatabase();
 const { createClient } = requireTestDatabase();
 
@@ -163,9 +133,8 @@ it('logout deletes only the signed-out session, leaving the other session valid'
 
 // --- Item 3: token storage (D-029 accepted risk A) ---
 
-// A failure in this test means the library changed how it stores session
-// tokens. If it ever fails, D-029's "accepted risk: plain-text tokens" must
-// be re-evaluated before relying on it again.
+// If this fails, the library changed how it stores session tokens, and
+// D-029's accepted risk A must be re-evaluated.
 it('documents plain-text session token storage (D-029 accepted risk A)', async () => {
   const email = 'checklist-token-storage@example.com';
   await signUp(app, { email, password: PASSWORD, name: 'Token Storage' });
@@ -173,9 +142,8 @@ it('documents plain-text session token storage (D-029 accepted risk A)', async (
   const cookieToken = tokenFromSessionCookie(cookie);
   expect(cookieToken.length).toBe(32);
 
-  // Found by the user, not by the token, so the comparison below is a real
-  // check that the stored value equals the cookie's token.
-  // Sign-up signs the user in automatically, so the user has more than one session.
+  // Sign-up also signs in, so the user has two sessions; find the one whose
+  // token equals the cookie's.
   const rows = await client.query<{ token: string }>(
     `SELECT s.token FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE u.email = $1`,
@@ -231,9 +199,7 @@ it('rejects cross-origin sign-out and update-user with a valid cookie, then the 
     .set('Origin', EVIL_ORIGIN)
     .set('Cookie', cookie)
     .send({ name: 'Hacked Name' });
-  // STOP condition (checklist requirement 13): if this is not a 4xx, the
-  // cross-origin check has failed and D-029 must be re-evaluated before
-  // adopting the library.
+  // If this is not a 4xx, the cross-origin check has failed (D-029).
   expect(evilUpdate.status >= 400 && evilUpdate.status < 500).toBe(true);
   expect(evilUpdate.body.code).toBe('INVALID_ORIGIN');
   const nameAfterEvil = await client.query<{ name: string }>(
@@ -508,9 +474,8 @@ it('does not read x-forwarded-for: with only that header the session IP is the t
     .send({ email, password: PASSWORD, name: 'IP Forwarded Only' });
   expect(res.status).toBe(200);
 
-  // x-forwarded-for is no longer read, so Better Auth finds no IP. With no IP
-  // it falls back to 127.0.0.1 when NODE_ENV is test or development; in
-  // production it records no IP at all.
+  // With no IP found, Better Auth uses 127.0.0.1 in test and development and
+  // records none in production.
   // Selects only ip_address, so a failure message cannot print a token.
   const rows = await client.query<{ ip_address: string | null }>(
     `SELECT s.ip_address FROM sessions s JOIN users u ON u.id = s.user_id
