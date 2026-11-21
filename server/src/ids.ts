@@ -1,8 +1,8 @@
 // Largest value a PostgreSQL bigint can hold.
 const MAX_BIGINT = 9223372036854775807n;
 
-// Digits only, no leading zero, and within bigint range, so a malformed ID
-// never reaches the database (where it would cause an error and a 500).
+// Digits only, no leading zero, within bigint range, so a malformed ID never
+// reaches the database and turns into a 500.
 export function isValidId(value: unknown): value is string {
   return (
     typeof value === 'string' &&

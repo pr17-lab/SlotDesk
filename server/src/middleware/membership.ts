@@ -5,8 +5,7 @@ import type { Role } from '../data/memberships.js';
 import { notFoundHandler } from './errors.js';
 
 declare global {
-  // Express's own types declare Locals inside the global Express namespace,
-  // so augmenting it needs a namespace block.
+  // Express declares Locals in a global namespace, so adding to it needs one.
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Locals {
@@ -16,7 +15,7 @@ declare global {
   }
 }
 
-// A non-member gets the same 404 as an unknown route, so they cannot tell
+// A non-member gets the same 404 as an unknown route, so they can't tell
 // whether the organization exists (D-030).
 export const requireMembership = async (
   req: Request,

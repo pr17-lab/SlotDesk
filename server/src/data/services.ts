@@ -1,15 +1,9 @@
 import { pool } from '../db.js';
 
-// id is a string because it is a bigint; durationMinutes is a number because
-// pg returns integer columns as JavaScript numbers.
+// id is a string because it's a bigint; integer columns come back as numbers.
 export type Service = { id: string; name: string; durationMinutes: number };
 
-// Every function here is a single pool.query, not pool.connect(), so the
-// D-014 listener rule does not apply: pool.query handles connection errors
-// itself.
-//
-// In each query, the double quotes in "durationMinutes" keep the capital M:
-// without them PostgreSQL would return the column as "durationminutes".
+// The double quotes in "durationMinutes" keep the capital M.
 
 export async function createService(
   orgId: string,
@@ -45,12 +39,9 @@ export async function getService(
   return result.rows[0] ?? null;
 }
 
-// Changes only the fields given. COALESCE($3, name) returns the first value
-// that is not null, so a null parameter (a field that was not given) keeps
-// the stored value.
-//
-// Changing a duration affects only availability offered later. A booking
-// stores its own start and end, so existing bookings do not change (Week 3).
+// Changes only the fields given: COALESCE($3, name) keeps the stored value
+// when the parameter is null. A new duration only affects future slots;
+// existing bookings keep their own start and end.
 export async function updateService(
   orgId: string,
   serviceId: string,

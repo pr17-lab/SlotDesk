@@ -2,31 +2,27 @@ import pg from 'pg';
 import { config } from './config.js';
 import { logger } from './logger.js';
 
-// One connection pool for the entire application. No queries run at startup;
-// the pool connects on first use. One DATABASE_URL is used by the app and by
-// migrations; in production it is Neon's direct (non-pooled) connection
-// string (D-031).
+// One connection pool for the whole app; it connects on first use. In
+// production DATABASE_URL is Neon's direct, non-pooled string (D-031).
 export const pool = new pg.Pool({ connectionString: config.databaseUrl });
 
-// pg-pool re-emits an idle client's connection error on the pool, and an
-// 'error' event with no listener crashes Node. The pool removes that client
-// by itself, so logging is all we do.
+// An idle client's connection error comes out on the pool, and an 'error'
+// event with no listener crashes Node. The pool drops that client itself, so
+// we just log it.
 pool.on('error', (err) => {
   logger.error({ err }, 'Idle database client error');
 });
 
-// Runs `work` inside one transaction on one pooled client: BEGIN, then
-// `work`, then COMMIT. If `work` throws, the transaction is rolled back and
-// the error is rethrown. Every function that needs a transaction uses this,
-// so the lost-connection rule (D-014) lives in one place.
+// Runs `work` in one transaction: BEGIN, work, COMMIT, or ROLLBACK and
+// rethrow if it throws. Every transaction goes through here, so the
+// lost-connection handling lives in one place (D-014).
 export async function withTransaction<T>(
   work: (client: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
   let discardClient = false;
-  // A checked-out client has no 'error' listener (pg-pool removes its own
-  // while the client is out), and pg emits 'error' when the connection drops.
-  // Without this listener that event would crash the whole process.
+  // A checked-out client has no 'error' listener, and pg emits 'error' when
+  // the connection drops. Without this, that would crash the whole process.
   const onError = (): void => {
     discardClient = true;
   };
@@ -45,8 +41,8 @@ export async function withTransaction<T>(
     throw error;
   } finally {
     client.removeListener('error', onError);
-    // A truthy value makes pg-pool destroy the client instead of reusing a
-    // connection whose transaction state is unknown.
+    // true makes the pool throw the client away instead of reusing a
+    // connection in an unknown state.
     client.release(discardClient);
   }
 }

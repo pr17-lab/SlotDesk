@@ -16,9 +16,8 @@ import { workingHoursRouter } from './working-hours.js';
 
 const nameSchema = z.string().trim().min(1).max(100);
 
-// The stored value is the library's normalised name, so 'asia/kolkata' is
-// saved as 'Asia/Kolkata'. The transform runs only if the length check
-// passed. z.NEVER tells TypeScript nothing is returned after an issue.
+// Stores the normalised name, so 'asia/kolkata' is saved as 'Asia/Kolkata'.
+// z.NEVER tells TypeScript nothing comes back after an issue.
 const timeZoneSchema = z
   .string()
   .max(64)
@@ -39,15 +38,12 @@ const createResourceSchema = z.object({
   timeZone: timeZoneSchema,
 });
 
-// Strict, and without timeZone: the time zone cannot be changed after
-// creation (D-032), because that would silently move every working-hours
-// window while bookings stay put. A body with timeZone, or any other unknown
-// key, is a 400.
+// No timeZone here: it's fixed at creation, because changing it would
+// quietly move every working-hours window while bookings stay put (D-032).
+// Strict, so sending timeZone is a 400.
 const renameResourceSchema = z.strictObject({ name: nameSchema });
 
-// No mergeParams: this router reads the organization only from
-// res.locals.membership (set by requireMembership in orgRouter), and its only
-// own parameter is :resourceId.
+// No mergeParams: the organization comes from res.locals.membership.
 export const resourcesRouter = Router();
 
 resourcesRouter.get(
@@ -63,8 +59,7 @@ resourcesRouter.post(
   '/',
   requireOwner,
   async (req: Request, res: Response): Promise<void> => {
-    // safeParse, not parse: req.body is undefined when no JSON body was sent,
-    // and that must be a 400, not a 500.
+    // safeParse, because a missing body must be a 400, not a 500.
     const parsed = createResourceSchema.safeParse(req.body);
     if (!parsed.success) {
       sendValidationError(res, parsed.error);
@@ -83,7 +78,7 @@ resourcesRouter.get(
   '/:resourceId',
   async (req: Request, res: Response): Promise<void> => {
     const resourceId = req.params.resourceId;
-    // A malformed ID is a 404 without a database query.
+    // No point querying for a malformed ID.
     if (!isValidId(resourceId)) {
       notFoundHandler(req, res);
       return;
@@ -125,5 +120,5 @@ resourcesRouter.patch(
 );
 
 resourcesRouter.use('/:resourceId/working-hours', workingHoursRouter);
-// availabilityRouter uses mergeParams so it can read :resourceId from this path (see routes/availability.ts).
+// availabilityRouter uses mergeParams to read :resourceId from this path.
 resourcesRouter.use('/:resourceId/availability', availabilityRouter);

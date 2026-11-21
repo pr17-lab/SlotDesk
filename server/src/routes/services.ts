@@ -13,12 +13,9 @@ import { requireOwner } from '../middleware/role.js';
 
 const nameSchema = z.string().trim().min(1).max(100);
 
-// 5 to 480 minutes in steps of 5, the same rule as the database CHECK.
-// z.int() is not redundant with multipleOf(5). Zod's multipleOf allows for
-// floating-point error, so it accepts 30.000000000000004; PostgreSQL then
-// refuses that value for an integer column (error 22P02) and the request
-// would be a 500 instead of a 400. A string such as "30" is a 400 (no
-// coercion).
+// 5 to 480 minutes in steps of 5, same as the database CHECK. z.int() isn't
+// redundant: multipleOf(5) lets 30.000000000000004 through, which the
+// database would refuse with a 500.
 const durationSchema = z.int().min(5).max(480).multipleOf(5);
 
 const createServiceSchema = z.object({
@@ -26,9 +23,8 @@ const createServiceSchema = z.object({
   durationMinutes: durationSchema,
 });
 
-// Strict, so a misspelt key ({ "name": "x", "duration": 30 }) is a 400
-// instead of a silent rename that ignores the duration. The refine rejects
-// {}: an update must change something.
+// Strict, so a misspelt key like "duration" is a 400 instead of being
+// ignored. The refine rejects {}: an update has to change something.
 const updateServiceSchema = z
   .strictObject({
     name: nameSchema.optional(),
@@ -39,9 +35,7 @@ const updateServiceSchema = z
     { message: 'Provide name or durationMinutes' },
   );
 
-// No mergeParams: this router reads the organization only from
-// res.locals.membership (set by requireMembership in orgRouter), and its only
-// own parameter is :serviceId.
+// No mergeParams: the organization comes from res.locals.membership.
 export const servicesRouter = Router();
 
 servicesRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
@@ -54,8 +48,7 @@ servicesRouter.post(
   '/',
   requireOwner,
   async (req: Request, res: Response): Promise<void> => {
-    // safeParse, not parse: req.body is undefined when no JSON body was sent,
-    // and that must be a 400, not a 500.
+    // safeParse, because a missing body must be a 400, not a 500.
     const parsed = createServiceSchema.safeParse(req.body);
     if (!parsed.success) {
       sendValidationError(res, parsed.error);
@@ -74,7 +67,7 @@ servicesRouter.get(
   '/:serviceId',
   async (req: Request, res: Response): Promise<void> => {
     const serviceId = req.params.serviceId;
-    // A malformed ID is a 404 without a database query.
+    // No point querying for a malformed ID.
     if (!isValidId(serviceId)) {
       notFoundHandler(req, res);
       return;

@@ -1,13 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 import { config } from '../config.js';
 
-// Why this exists (D-030): Better Auth's origin check only covers /api/auth,
-// so our own routes need their own. SameSite=Lax is per site, not per origin:
-// a page on another subdomain of the same site still sends our cookie.
+// Better Auth's origin check only covers /api/auth, so our routes need their
+// own. SameSite=Lax alone isn't enough: a page on another subdomain of the
+// same site still sends our cookie (D-030).
 const trustedOrigin = new URL(config.authUrl).origin;
 
-// Requests with these methods do not change data, so they skip the
-// origin check.
+// These don't change data, so they skip the check.
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export const requireTrustedOrigin = (
@@ -19,8 +18,7 @@ export const requireTrustedOrigin = (
     next();
     return;
   }
-  // Exact match only. A missing header, a literal "null" or any other value
-  // is rejected.
+  // Exact match only; a missing header or "null" is refused too.
   if (req.get('origin') === trustedOrigin) {
     next();
     return;

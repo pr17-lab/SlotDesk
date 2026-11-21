@@ -1,15 +1,13 @@
 import { z } from 'zod';
 
-// Kept as a standalone exported function so existing unit tests can import and
-// exercise every branch directly. The Zod schema below also calls it so the
-// config object always goes through the same rules.
+// Exported on its own so the unit tests can hit every branch. The schema
+// below calls it too, so there's one set of rules.
 export const parsePort = (value: string | undefined): number => {
   const trimmed = value?.trim() ?? '';
   if (trimmed === '') {
     return 3000;
   }
-  // Reject hex (0x...), scientific notation (1e3), decimals (3000.5), and
-  // anything non-numeric before Number() widens the accepted set.
+  // Digits only, before Number() gets a chance to accept 0x10, 1e3 or 3000.5.
   if (!/^\d+$/.test(trimmed)) {
     throw new Error(
       `Invalid PORT "${value}": must be a plain integer between 1 and 65535`,
@@ -24,9 +22,7 @@ export const parsePort = (value: string | undefined): number => {
   return parsed;
 };
 
-// Zod schema for DATABASE_URL: must be a valid URL with the postgres: or
-// postgresql: scheme. Exported so tests can validate individual values without
-// constructing a full environment.
+// DATABASE_URL must be a postgres: or postgresql: URL. Exported for tests.
 export const databaseUrlSchema = z
   .string()
   .url({ message: 'DATABASE_URL must be a valid URL' })
@@ -35,13 +31,13 @@ export const databaseUrlSchema = z
     { message: 'DATABASE_URL must use the postgres: or postgresql: scheme' },
   );
 
-// Zod schema for BETTER_AUTH_SECRET (D-029). Messages name the variable but
-// never include its value, so a secret never ends up in a log or error.
+// The messages name the variable but never show its value, so the secret
+// can't leak into a log.
 export const authSecretSchema = z
   .string({ message: 'BETTER_AUTH_SECRET is required' })
   .min(32, { message: 'BETTER_AUTH_SECRET must be at least 32 characters' });
 
-// Zod schema for BETTER_AUTH_URL (D-029): the public base URL of the app.
+// BETTER_AUTH_URL: the address the browser uses for the app.
 export const authUrlSchema = z
   .string({ message: 'BETTER_AUTH_URL is required' })
   .url({ message: 'BETTER_AUTH_URL must be a valid URL' })
@@ -49,10 +45,8 @@ export const authUrlSchema = z
     message: 'BETTER_AUTH_URL must use the http: or https: scheme',
   });
 
-// Zod schema for all environment variables (D-022, D-029). The PORT field calls
-// parsePort so both the schema and the standalone function stay in sync.
-// Exported so tests can check the production URL rule without changing
-// process.env.
+// All environment variables (D-022). Exported so tests can check the
+// production rule without touching process.env.
 export const envSchema = z
   .object({
     PORT: z
@@ -66,8 +60,8 @@ export const envSchema = z
     BETTER_AUTH_SECRET: authSecretSchema,
     BETTER_AUTH_URL: authUrlSchema,
   })
-  // Session cookies must only travel over HTTPS in production; http:// stays
-  // allowed in development and test for localhost.
+  // In production the session cookie must only travel over HTTPS; http is
+  // fine for localhost.
   .superRefine((env, ctx) => {
     if (
       env.NODE_ENV === 'production' &&

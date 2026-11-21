@@ -1,4 +1,4 @@
-// shortcut: no rate limit on /api/orgs (Better Auth limits only /api/auth); every route here needs a session and membership, so it stays until public booking, and must be added before any route works without sign-in (customer self-booking, public availability; D-031, D-033)
+// shortcut: no rate limit on /api/orgs yet (Better Auth only limits /api/auth); add one before the demo link is shared and before any route works without sign-in (D-031, D-033)
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
@@ -22,8 +22,7 @@ export const orgsRouter = Router();
 orgsRouter.use(requireTrustedOrigin, requireSession);
 
 orgsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  // safeParse, not parse: req.body is undefined when no JSON body was sent,
-  // and that must be a 400, not a 500.
+  // safeParse, because a missing body must be a 400, not a 500.
   const parsed = createOrgSchema.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
@@ -42,9 +41,8 @@ orgsRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
   res.status(200).json(orgs);
 });
 
-// mergeParams: true is needed because requireMembership runs inside orgRouter
-// and reads :orgId, which belongs to the parent's mount path. Without it,
-// req.params.orgId is undefined here. Step 6c adds /members to this router.
+// mergeParams, because requireMembership reads :orgId from the parent's
+// mount path.
 const orgRouter = Router({ mergeParams: true });
 orgRouter.use(requireMembership);
 orgRouter.use('/members', membersRouter);
@@ -53,8 +51,8 @@ orgRouter.use('/services', servicesRouter);
 orgRouter.use('/bookings', bookingsRouter);
 
 orgRouter.get('/', async (req: Request, res: Response): Promise<void> => {
-  // The organization comes only from the membership check, never from
-  // req.params or the body.
+  // The organization comes from the membership check, never the params or
+  // the body.
   const { orgId, role } = res.locals.membership;
   const org = await getOrganization(orgId);
   if (org === null) {

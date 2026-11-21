@@ -5,9 +5,8 @@ import { SELECT_WORKING_HOURS, type WorkingWindow } from './working-hours.js';
 // pg returns timestamptz columns as JavaScript Date objects.
 export type BookedRange = { startsAt: Date; endsAt: Date };
 
-// A booking as the API returns it (D-033). IDs are strings because they are
-// bigints; the three times are Date objects, which JSON turns into UTC ISO
-// strings.
+// A booking as the API returns it. IDs are strings because they're bigints;
+// the Dates turn into UTC ISO strings in JSON.
 export type Booking = {
   id: string;
   resourceId: string;
@@ -20,39 +19,30 @@ export type Booking = {
   createdAt: Date;
 };
 
-// The columns of a Booking, renamed to the API's names. Shared by the four
-// queries in this file that return whole bookings (create, list, view,
-// cancel), so they always return the same shape. The double quotes keep the
-// capital letters: without them PostgreSQL would return "resourceid",
-// "startsat" and so on.
+// The columns of a Booking with the API's names, shared by every query here
+// so they all return the same shape. The double quotes keep the capitals;
+// without them PostgreSQL would return "resourceid", "startsat" and so on.
 const BOOKING_COLUMNS = `id, resource_id AS "resourceId", service_id AS "serviceId",
   starts_at AS "startsAt", ends_at AS "endsAt", status,
   customer_name AS "customerName", customer_email AS "customerEmail",
   created_at AS "createdAt"`;
 
-// What createBooking found. Two kinds of failure, because the route answers
-// them differently: 404 for a resource or service that is not in this
-// organization, 400 for a start time that is not offered.
+// Two kinds of failure, because the route answers them differently: 404 for
+// a resource or service not in this organization, 400 for a start that isn't
+// offered.
 export type CreateBookingResult =
   | { status: 'created'; booking: Booking }
   | { status: 'notFound' }
   | { status: 'notOffered' };
 
-// Books one guest customer into one slot, in one transaction (D-012,
-// D-033 C): lock the resource row, read the service and the working hours,
-// check the start, insert, commit.
+// Books one guest into one slot in a single transaction: lock the resource
+// row, read the service and working hours, check the start, insert (D-012).
 //
-// The lock does not decide who wins; the bookings_no_overlap constraint does.
-// If another confirmed booking overlaps, the INSERT fails with 23P01, which
-// the central error handler turns into a 409. The lock makes concurrent
-// requests for the same resource queue here instead of deadlocking (Step
-// 3b), and since replaceWorkingHours takes the same lock, the working hours
-// cannot change between the read and the insert.
-//
-// The service and working-hours reads go through the transaction's client,
-// not the pool, so they run inside the transaction and after the lock.
-//
-// `now` is passed in, not read from the clock, like availableSlots.
+// The lock doesn't decide who wins; the bookings_no_overlap constraint does.
+// An overlap makes the INSERT fail with 23P01, which becomes a 409. The lock
+// just makes requests for the same resource wait their turn instead of
+// deadlocking. Saving working hours takes the same lock, so the hours can't
+// change under us between the read and the insert.
 export async function createBooking(
   orgId: string,
   request: {
@@ -71,7 +61,7 @@ export async function createBooking(
       [orgId, request.resourceId],
     );
     if (resource.rowCount === 0) {
-      // Nothing was written, so committing this transaction changes nothing.
+      // Nothing was written, so committing here is harmless.
       return { status: 'notFound' };
     }
     const service = await client.query<{ durationMinutes: number }>(
@@ -98,9 +88,8 @@ export async function createBooking(
       return { status: 'notOffered' };
     }
 
-    // starts_at and ends_at come from the slot, not from the request, so
-    // the stored start is the slot's exact instant whatever offset the client
-    // wrote, and the end is the start plus the service's duration (D-033 B).
+    // Store the slot's times, not the request's: the end is always the
+    // start plus the service's duration.
     const inserted = await client.query<Booking>(
       `INSERT INTO bookings
          (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
@@ -120,18 +109,8 @@ export async function createBooking(
   });
 }
 
-// listConfirmedBookings is used by the availability route (Step 9d).
-//
-// A single pool.query, not pool.connect(), so the D-014 listener rule does
-// not apply here: pool.query handles connection errors itself.
-//
-// The double quotes in "startsAt" and "endsAt" keep the capital A: without
-// them PostgreSQL would return the columns as "startsat" and "endsat".
-//
-// Only confirmed bookings block a slot; a cancelled one frees it, as in the
-// bookings_no_overlap constraint. The last line keeps every booking that
-// overlaps [start, end): it starts before the range ends and ends after the
-// range starts.
+// The confirmed bookings that overlap [start, end), for the availability
+// route. Cancelled bookings don't block a slot, same as in the constraint.
 export async function listConfirmedBookings(
   orgId: string,
   resourceId: string,
@@ -148,19 +127,13 @@ export async function listConfirmedBookings(
   return result.rows;
 }
 
-// The functions below are single pool.query calls, like
-// listConfirmedBookings, so the D-014 listener rule does not apply.
-
-// The bookings of one resource that start inside [start, end), confirmed and
-// cancelled, oldest first (Step 10e). The route passes the exact UTC range of
-// the requested local dates, so a booking is listed on the local date it
-// starts. The route has already checked that the resource is in this
-// organization; the org_id filter here is kept anyway, as in every tenant
-// query (D-030).
+// The bookings of one resource that start inside [start, end), confirmed
+// and cancelled, oldest first. The route has already checked the resource
+// belongs to this organization; we filter on org_id anyway, like every
+// tenant query.
 //
-// id breaks a tie: a cancelled booking and a later confirmed one can start
-// at the same instant, and without it their order could change between
-// calls.
+// id breaks ties: a cancelled booking and a newer confirmed one can start at
+// the same instant, and we want a stable order.
 export async function listBookings(
   orgId: string,
   resourceId: string,
@@ -178,9 +151,9 @@ export async function listBookings(
   return result.rows;
 }
 
-// One booking, or null when it is not in this organization. Filtered on
-// org_id and id only, so a missing org_id filter would return another
-// organization's booking, and the isolation test sees it (D-033).
+// One booking, or null if it's not in this organization. The filter is just
+// org_id and id, so if org_id ever went missing the isolation test would
+// catch it.
 export async function getBooking(
   orgId: string,
   bookingId: string,
@@ -192,12 +165,9 @@ export async function getBooking(
   return result.rows[0] ?? null;
 }
 
-// Cancels one booking and returns it, or null when it is not in this
-// organization (D-033). No transaction and no lock: setting the status to
-// cancelled can never create an overlap, because the bookings_no_overlap
-// constraint covers confirmed bookings only. Cancelling a booking that is
-// already cancelled changes nothing and returns it again, so a client that
-// retries after losing the answer gets the same 200.
+// Cancels one booking and returns it, or null if it's not in this
+// organization. No lock needed: cancelling can never create an overlap.
+// Cancelling twice just returns the booking again, so a retry is safe.
 export async function cancelBooking(
   orgId: string,
   bookingId: string,
