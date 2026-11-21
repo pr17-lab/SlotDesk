@@ -29,11 +29,12 @@ flowchart TD
   F --> G["/api/orgs: origin check, session check"]
   G --> H["/api/orgs/:orgId: membership check"]
   H --> I["/members: owner-only check on changes"]
-  F --> J["404 handler"]
+  F --> L["Built React app, if present: its files, then index.html for any other GET outside /api"]
+  L --> J["404 handler"]
   J --> K["Error handler"]
 ```
 
-Two ordering rules matter. The Better Auth handler must come before `express.json()`, or auth requests hang. And every route lives under `/api`, so that when a React app is served from the same origin later, an API path can never collide with a page URL.
+Two ordering rules matter. The Better Auth handler must come before `express.json()`, or auth requests hang. And every route lives under `/api`, so the React app can share the API's origin without an API path ever colliding with a page URL. The app is served after the API routes, and a path starting with `/api` never gets the page, in any letter case, so a wrong API URL still gets the JSON 404.
 
 Routes handle HTTP and input validation (Zod). The SQL lives in separate data functions in `src/data/`. There is no service layer yet, because there are no business rules to put in one.
 
