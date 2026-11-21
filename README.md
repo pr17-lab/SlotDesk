@@ -60,7 +60,7 @@ Every route is under `/api`. IDs are strings in JSON.
 | `GET /api/orgs/:orgId/bookings/:bookingId` | members | View one booking (404 if not found) |
 | `POST /api/orgs/:orgId/bookings/:bookingId/cancel` | members | Cancel a booking (200 with the booking, `status` now `cancelled`). Cancelling it again returns the same 200. The slot is free again; there is no un-cancel (404 if not found) |
 
-A person who is not a member of an organization gets 404, the same answer as for an organization that does not exist. Requests that change data under `/api/orgs` must send an `Origin` header that matches `BETTER_AUTH_URL`.
+A person who is not a member of an organization gets 404, the same answer as for an organization that does not exist. Requests that change data under `/api/orgs` must send an `Origin` header that matches `BETTER_AUTH_URL`. Each client address may make 100 requests that change data and 600 requests of any kind to `/api/orgs` in 15 minutes; beyond that the answer is 429 with a `Retry-After` header. `WRITE_RATE_LIMIT` and `REQUEST_RATE_LIMIT` change the two numbers.
 
 ## Run it locally
 

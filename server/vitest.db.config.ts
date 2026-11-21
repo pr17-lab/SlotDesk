@@ -18,6 +18,10 @@ export default defineConfig({
       // the app. Not a real secret: exactly 32 characters, the minimum allowed.
       BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
       BETTER_AUTH_URL: 'http://localhost:3000',
+      // One test file sends over 400 writes through one app; the real limits
+      // are tested in test/rate-limit.test.ts.
+      WRITE_RATE_LIMIT: '100000',
+      REQUEST_RATE_LIMIT: '100000',
     },
   },
 });

@@ -7,7 +7,7 @@ import { config } from '../config.js';
 const trustedOrigin = new URL(config.authUrl).origin;
 
 // These don't change data, so they skip the check.
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+export const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export const requireTrustedOrigin = (
   req: Request,

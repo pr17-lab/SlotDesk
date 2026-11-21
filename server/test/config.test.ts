@@ -164,3 +164,41 @@ describe('envSchema (BETTER_AUTH_URL must be https in production)', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('envSchema (rate limit settings)', () => {
+  const baseEnv = {
+    DATABASE_URL: 'postgresql://test:test@db.invalid:5432/slotdesk_test',
+    BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+  };
+
+  it('uses 100 writes and 600 requests when they are not set', () => {
+    const result = envSchema.parse(baseEnv);
+    expect(result.WRITE_RATE_LIMIT).toBe(100);
+    expect(result.REQUEST_RATE_LIMIT).toBe(600);
+  });
+
+  it('reads both settings as numbers', () => {
+    const result = envSchema.parse({
+      ...baseEnv,
+      WRITE_RATE_LIMIT: '5',
+      REQUEST_RATE_LIMIT: '50',
+    });
+    expect(result.WRITE_RATE_LIMIT).toBe(5);
+    expect(result.REQUEST_RATE_LIMIT).toBe(50);
+  });
+
+  it.each(['0', '-1', '1.5', '1e3', 'ten', '', ' 5'])(
+    'rejects "%s" and names the variable',
+    (value) => {
+      const result = envSchema.safeParse({
+        ...baseEnv,
+        WRITE_RATE_LIMIT: value,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toMatch(/WRITE_RATE_LIMIT/);
+      }
+    },
+  );
+});
