@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod';
 
 // Exported on its own so the unit tests can hit every branch. The schema
@@ -59,6 +60,8 @@ export const envSchema = z
     DATABASE_URL: databaseUrlSchema,
     BETTER_AUTH_SECRET: authSecretSchema,
     BETTER_AUTH_URL: authUrlSchema,
+    // Folder of the built React app. Tests point it at a fixture.
+    CLIENT_DIST_DIR: z.string().min(1).optional(),
   })
   // In production the session cookie must only travel over HTTPS; http is
   // fine for localhost.
@@ -89,4 +92,10 @@ export const config = {
   databaseUrl: parsed.data.DATABASE_URL,
   authSecret: parsed.data.BETTER_AUTH_SECRET,
   authUrl: parsed.data.BETTER_AUTH_URL,
+  // Defaults to client/dist next to server/. src/ and dist/ sit at the same
+  // depth, so this works under tsx and after the build.
+  clientDistDir: path.resolve(
+    parsed.data.CLIENT_DIST_DIR ??
+      path.join(import.meta.dirname, '..', '..', 'client', 'dist'),
+  ),
 };
