@@ -1,4 +1,3 @@
-// shortcut: no rate limit on /api/orgs yet (Better Auth only limits /api/auth); add one before the demo link is shared and before any route works without sign-in (D-031, D-033)
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';

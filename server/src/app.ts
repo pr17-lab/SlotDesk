@@ -6,6 +6,7 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth.js';
 import { config } from './config.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
+import { requestLimiter, writeLimiter } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { orgsRouter } from './routes/orgs.js';
 
@@ -17,7 +18,10 @@ app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.json({ limit: '10kb' }));
 
 app.use('/api', healthRouter);
-app.use('/api/orgs', orgsRouter);
+// The limits come first, so a flood is refused before the origin check, the
+// session lookup or any database query. The write limiter goes last so its
+// headers show on writes, where it is the tighter one.
+app.use('/api/orgs', requestLimiter, writeLimiter, orgsRouter);
 
 // The built React app, if there is one. React Router handles page paths, so
 // any other GET gets index.html, except /api paths (D-019). Express ignores

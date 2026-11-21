@@ -46,6 +46,17 @@ export const authUrlSchema = z
     message: 'BETTER_AUTH_URL must use the http: or https: scheme',
   });
 
+// A rate limit setting: a whole number of at least 1, or the default when it
+// isn't set. The message names the variable.
+const rateLimitSchema = (name: string, fallback: number) =>
+  z
+    .string()
+    .regex(/^[1-9]\d*$/, {
+      message: `${name} must be a whole number of at least 1`,
+    })
+    .transform(Number)
+    .default(fallback);
+
 // All environment variables (D-022). Exported so tests can check the
 // production rule without touching process.env.
 export const envSchema = z
@@ -62,6 +73,10 @@ export const envSchema = z
     BETTER_AUTH_URL: authUrlSchema,
     // Folder of the built React app. Tests point it at a fixture.
     CLIENT_DIST_DIR: z.string().min(1).optional(),
+    // Per client address and 15 minutes, on /api/orgs: changes only, and
+    // every request. The database tests raise both.
+    WRITE_RATE_LIMIT: rateLimitSchema('WRITE_RATE_LIMIT', 100),
+    REQUEST_RATE_LIMIT: rateLimitSchema('REQUEST_RATE_LIMIT', 600),
   })
   // In production the session cookie must only travel over HTTPS; http is
   // fine for localhost.
@@ -92,6 +107,8 @@ export const config = {
   databaseUrl: parsed.data.DATABASE_URL,
   authSecret: parsed.data.BETTER_AUTH_SECRET,
   authUrl: parsed.data.BETTER_AUTH_URL,
+  writeRateLimit: parsed.data.WRITE_RATE_LIMIT,
+  requestRateLimit: parsed.data.REQUEST_RATE_LIMIT,
   // Defaults to client/dist next to server/. src/ and dist/ sit at the same
   // depth, so this works under tsx and after the build.
   clientDistDir: path.resolve(

@@ -26,7 +26,7 @@ flowchart TD
   C -- yes --> D["Better Auth handler"]
   C -- no --> E["express.json: 10 KB body limit"]
   E --> F["Routes under /api"]
-  F --> G["/api/orgs: origin check, session check"]
+  F --> G["/api/orgs: rate limits, origin check, session check"]
   G --> H["/api/orgs/:orgId: membership check"]
   H --> I["/members: owner-only check on changes"]
   F --> L["Built React app, if present: its files, then index.html for any other GET outside /api"]
@@ -114,7 +114,8 @@ The settings that matter:
 - **Password rules.** Minimum 15 characters, maximum 128. No password reset and no email verification in the first version.
 - **Origin checks always on.** Better Auth skips its origin and CSRF checks when `NODE_ENV` is `test` or a `TEST` variable is set. The setting `advanced.disableOriginCheck: false` keeps them on in every environment.
 - **HTTPS in production.** The app refuses to start in production unless `BETTER_AUTH_URL` starts with `https://`. On the deployed service the cookie is `__Secure-better-auth.session_token` with `HttpOnly; Secure; SameSite=Lax`.
-- **Rate limiting** is Better Auth's, in memory, and active in production only: three sign-in or sign-up requests per 10 seconds per client address. The deployed service sits behind Cloudflare, so the client address is read only from `cf-connecting-ip`. A forged copy of that header is rejected by Cloudflare before it reaches the app. Our own routes have no rate limit yet.
+- **Rate limiting** is Better Auth's, in memory, and active in production only: three sign-in or sign-up requests per 10 seconds per client address. The deployed service sits behind Cloudflare, so the client address is read only from `cf-connecting-ip`. A forged copy of that header is rejected by Cloudflare before it reaches the app.
+- **Rate limits on our own routes.** `/api/orgs` has two limits per client address (the same header) in each 15 minutes: 100 requests that change data, and 600 requests of any kind. Over a limit the answer is 429 `{ "error": "Too Many Requests" }` with `Retry-After`. They run before the origin check and the session lookup, so a flood never costs a database query. The writes limit exists because anyone can sign up, and one account could otherwise fill the free database; the all-requests limit protects the free instance's small CPU and the database's monthly compute hours. Counts are kept in memory. IPv6 addresses in the same /56 share one count. `/api/health` is not limited, and `/api/auth` has Better Auth's own limit.
 - **Password hashing** is our own code in `src/password.ts`, passed to Better Auth as its `hash` and `verify`. It uses scrypt with N=2^15, r=8, p=3. OWASP's minimum is N=2^17, r=8, p=1, and it lists N=2^15, r=8, p=3 as equivalent (32 MiB of memory per hash instead of 128 MiB). The settings are stored inside each hash (`scrypt:N:r:p:salt:key`), so the cost can be changed later while old hashes still verify. Passwords are NFKC-normalised, hashes are compared in constant time, and the settings read back from a stored hash have upper limits. A malformed stored hash throws, which becomes a 500 and never a wrong-password 401. The cost was measured on the free Render instance before any real account existed: a warm sign-in takes about 1.7 seconds there. That is slower than the 1.5 seconds first aimed for, and the cost was kept anyway: sign-in is rare, and most of the time is the free instance's small CPU.
 
 Better Auth was adopted provisionally. The remaining check, that the future React client calls `/api/auth/get-session` and trusts one origin in both places, waits for the client.
@@ -156,7 +157,9 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 ## 8. Known limits
 
 - Session tokens are stored in plain text in the `sessions` table, as Better Auth currently does, and signing out fails open: if the database is down during sign-out the response is still 200 and the session row stays valid. Both are accepted for now.
-- Our own routes have no rate limit and list endpoints have no pagination. Both are marked in the code as shortcuts.
+- Our rate limits count per client address in memory, and list endpoints have no pagination. Both are marked in the code as shortcuts. A restart resets the counts, and a second server instance would double the limits.
+- Someone with many addresses is not stopped by a per-address limit, so they could fill the free database with junk rows. The database then refuses new writes instead of billing us, existing data stays safe, and the fix is to delete the junk. A cap per account is the next step, then a CAPTCHA on sign-up (parked until the application is finished, with email verification).
+- Several users behind one address, such as an office or a mobile carrier's shared address, share one count.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
 - The React client does not exist yet.
