@@ -1,5 +1,6 @@
 import { useRouteError } from 'react-router';
 import { ApiError } from '../api';
+import { Page } from '../Page';
 
 export function ErrorPage() {
   const error = useRouteError();
@@ -7,9 +8,9 @@ export function ErrorPage() {
     error instanceof ApiError ? error.message : 'Something went wrong';
 
   return (
-    <main className="mx-auto max-w-xl p-8">
-      <h1 className="text-2xl font-bold">SlotDesk</h1>
-      <p className="mt-4">{message}</p>
-    </main>
+    <Page>
+      <h1 className="text-2xl font-semibold">SlotDesk</h1>
+      <p className="text-danger mt-4">{message}</p>
+    </Page>
   );
 }
