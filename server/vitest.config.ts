@@ -2,6 +2,10 @@ import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // The password tests run the deliberately slow scrypt hash (D-031) and
+    // one test loads the whole app, so on a busy machine they can pass the 5 s
+    // default and fail without anything being wrong.
+    testTimeout: 15000,
     // Provide a DATABASE_URL so the config module can be imported in tests
     // without a real database. The host (db.invalid) is deliberately
     // unreachable so no test can accidentally connect to a real database.
