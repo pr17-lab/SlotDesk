@@ -3,16 +3,9 @@ import { api } from './api';
 
 export type Session = { user: { name: string; email: string } } | null;
 
-// The root loader and the page loader both ask for the session on the same
-// navigation. They share one request; it is forgotten as soon as it ends.
-let inFlight: Promise<Session> | null = null;
-
 // The server answers 200 with null when nobody is signed in.
 export function getSession() {
-  inFlight ??= api<Session>('/auth/get-session').finally(() => {
-    inFlight = null;
-  });
-  return inFlight;
+  return api<Session>('/auth/get-session');
 }
 
 // For loaders of pages that need a signed-in user.

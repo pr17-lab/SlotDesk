@@ -6,7 +6,10 @@ import { routes } from '../src/routes';
 function serve(status: number, body: unknown) {
   const fetch = vi
     .fn()
-    .mockResolvedValue(new Response(JSON.stringify(body), { status }));
+    // A new Response each call: the root and page loaders both read one.
+    .mockImplementation(
+      async () => new Response(JSON.stringify(body), { status }),
+    );
   vi.stubGlobal('fetch', fetch);
   return fetch;
 }
