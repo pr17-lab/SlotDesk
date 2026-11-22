@@ -128,7 +128,7 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 
 **Local.** `docker-compose.yml` runs PostgreSQL 17 with two databases, `slotdesk` and `slotdesk_test`. The Compose variables and the app variables are in separate files so each tool reads only its own.
 
-**Deployed.** The API runs on a free Render web service, with a Neon PostgreSQL database. Choices that came out of the first deploy:
+**Deployed.** The API runs on a free Render web service, with a Neon PostgreSQL database. The service builds from the repository root: first the client, then the server, then the migrations. The server then serves the built client, so the browser sees one address and needs no CORS. Choices that came out of the first deploy:
 
 - **One direct database URL** for the app and migrations. Neon's pooled endpoint (PgBouncer in transaction mode) solves a problem a single long-lived process does not have.
 - **Migrations run at the end of Render's build command**, so `node-pg-migrate` stays a development dependency and the production dependency audit stays clean.
@@ -162,7 +162,7 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 - Several users behind one address, such as an office or a mobile carrier's shared address, share one count.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
-- The React client does not exist yet.
+- The React client so far is a home page that shows whether you are signed in.
 - A booking cannot be edited or un-cancelled; cancel it and book again.
 - Availability and booking are members-only for now (staff book for guest customers), and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered or accepted. A client that retries after losing the response to a booking gets a 409 for its own booking.
 - Working hours cannot run past midnight, and there are no holidays, time off or buffers between bookings.

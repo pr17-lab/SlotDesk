@@ -99,6 +99,36 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk_test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk
 
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: server/.nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      - run: npm test
+
+      - run: npm run build
+
   audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -122,3 +152,15 @@ jobs:
         # always visible in the same run.
         if: ${{ !cancelled() }}
         run: node scripts/audit-check.ts all
+
+      - name: Audit client production dependencies (any severity)
+        # The client has no exceptions list yet; add one if an advisory ever
+        # has no fix.
+        if: ${{ !cancelled() }}
+        working-directory: client
+        run: npm audit --omit=dev
+
+      - name: Audit all client dependencies (high or critical)
+        if: ${{ !cancelled() }}
+        working-directory: client
+        run: npm audit --audit-level=high

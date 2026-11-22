@@ -1,6 +1,6 @@
 # SlotDesk
 
-A multi-tenant appointment booking API. Businesses (organizations) have staff and, later, bookable resources such as a person or a room. The two things it is built to get right are:
+A multi-tenant appointment booking app: an API and a React client. Businesses (organizations) have staff and, later, bookable resources such as a person or a room. The two things it is built to get right are:
 
 - **No double booking**, even when many people book the same slot at the same moment. The database enforces it.
 - **No data leaking between organizations.** Every organization route checks membership, and every query is scoped to the organization.
@@ -20,15 +20,15 @@ This is a work in progress. What exists and is tested today:
 - Booking a guest customer into a slot (owner or staff), accepted only for a start the availability route would offer.
 - Listing a resource's bookings by local date, viewing one booking, and cancelling a booking (owner or staff).
 - The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections and under 10 simultaneous requests to the booking route.
-- The API runs on a free Render instance with a Neon database.
+- The API runs on a free Render instance with a Neon database, and serves the React client from the same address.
 
-Not built yet: the React client. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+The React client so far is a home page that shows whether you are signed in; the screens come next. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
-**Live API:** `https://slotdesk-wfgi.onrender.com/api/health`. It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
+**Live app:** `https://slotdesk-wfgi.onrender.com` (the API health check is `/api/health`). It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
 ## Tech stack
 
-Node 24, TypeScript (strict), Express 5, PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, `temporal-polyfill` (time zone checks), pino, Vitest and Supertest, ESLint and Prettier, GitHub Actions.
+Node 24, TypeScript (strict), Express 5, React 19 with React Router, Vite, Tailwind CSS, PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, `temporal-polyfill` (time zone checks), pino, Vitest, Supertest and Testing Library, ESLint and Prettier, GitHub Actions.
 
 ## API
 
@@ -95,10 +95,12 @@ Right after `up -d` the status says `health: starting`. Run `docker compose ps` 
 
 Docker Compose names the container and the data volume after the folder you cloned into (in lowercase). If you already have another copy of this project in a folder with the same name, the two copies share one database, and `docker compose down -v` in either one deletes it. Clone into a folder with a different name to keep them apart.
 
-**4. Install the dependencies.**
+**4. Install the dependencies.** The server and the client are separate npm packages.
 
 ```powershell
-cd server
+cd client
+npm ci
+cd ..\server
 npm ci
 ```
 
@@ -130,9 +132,30 @@ Leave it running. In a second terminal (any folder):
 curl.exe http://localhost:3000/api/health
 ```
 
-You should see `{"status":"ok"}`. (In PowerShell, use `curl.exe`, not `curl`, which is a different command.) Stop the server with Ctrl+C in the first terminal.
+You should see `{"status":"ok"}`. (In PowerShell, use `curl.exe`, not `curl`, which is a different command.)
+
+**8. Start the client.** In another terminal, from the project folder:
+
+```powershell
+cd client
+npm run dev
+```
+
+Open `http://localhost:5173`. Vite passes every `/api` request on to the server, so the browser sees one address. That is why `BETTER_AUTH_URL` in `server\.env` is `http://localhost:5173`: requests that change data must come from that origin. A `curl.exe` call straight to port 3000 that changes data needs `-H "Origin: http://localhost:5173"`. Stop each with Ctrl+C.
+
+To try the built app the way Render runs it: `npm run build` in `client`, `npm run build` in `server`, set `BETTER_AUTH_URL=http://localhost:3000` in `server\.env`, then `npm start` in `server` and open `http://localhost:3000`. Use `localhost`, not your network address: the security headers ask browsers to load files over https, which fails on a plain http network address.
 
 ### Run the checks
+
+From the `client` folder:
+
+```powershell
+npm run typecheck
+npm run lint
+npm run format:check
+npm test
+npm run build
+```
 
 From the `server` folder:
 
@@ -156,6 +179,7 @@ npm run test:db
 | `password authentication failed for user "slotdesk"` | An old Docker data volume kept an earlier password. PostgreSQL reads the password only when it first creates the volume | Reset the local database: `docker compose down -v`, then `docker compose up -d` (this deletes the local data) |
 | The server exits at start, mentioning `BETTER_AUTH_SECRET` | The secret is missing or shorter than 32 characters | Repeat step 5 |
 | `npm warn EBADENGINE` from `npm ci`, or odd errors from the tools | Node is not version 24 | Install Node 24 and run `npm ci` again |
+| 403 when the client changes data | `BETTER_AUTH_URL` does not match the address in the browser | Use `http://localhost:5173` with `npm run dev`, or `http://localhost:3000` with the built app, and restart the server |
 
 ### If port 5432 is already in use
 
@@ -170,6 +194,12 @@ Then run `docker compose down -v` and `docker compose up -d` again.
 ## Project layout
 
 ```
+client/
+  src/
+    main.tsx, routes.tsx   start-up and the list of pages (React Router)
+    api.ts                 calls to our API, with a clear message for each error
+    pages/                 one file per page
+  test/                    Testing Library tests
 server/
   src/
     app.ts, server.ts      the Express app, and the file that starts it
