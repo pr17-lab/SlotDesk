@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router';
 import { ErrorPage } from './pages/ErrorPage';
 import { Home, homeLoader } from './pages/Home';
 import { NotFound } from './pages/NotFound';
+import { Page } from './Page';
 
 export const routes: RouteObject[] = [
   {
@@ -10,7 +11,11 @@ export const routes: RouteObject[] = [
     Component: Home,
     ErrorBoundary: ErrorPage,
     // Shown while the first loader runs; a cold start on Render takes ~30 s.
-    HydrateFallback: () => <p className="p-8">Loading…</p>,
+    HydrateFallback: () => (
+      <Page>
+        <p className="text-muted">Loading…</p>
+      </Page>
+    ),
   },
   { path: '*', Component: NotFound },
 ];
