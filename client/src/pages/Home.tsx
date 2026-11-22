@@ -1,24 +1,18 @@
 import { useLoaderData } from 'react-router';
-import { api } from '../api';
 import { Page } from '../Page';
+import { requireUser } from '../session';
 
-type Session = { user: { email: string } } | null;
-
-export async function homeLoader() {
-  return api<Session>('/auth/get-session');
+export function homeLoader() {
+  return requireUser();
 }
 
 export function Home() {
-  const session = useLoaderData<typeof homeLoader>();
+  const user = useLoaderData<typeof homeLoader>();
 
   return (
     <Page>
       <h1 className="text-2xl font-semibold">SlotDesk</h1>
-      <p className="text-muted mt-4">
-        {session
-          ? `Signed in as ${session.user.email}.`
-          : 'You are signed out.'}
-      </p>
+      <p className="text-muted mt-4">{`Signed in as ${user.email}.`}</p>
     </Page>
   );
 }

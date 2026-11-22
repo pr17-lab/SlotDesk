@@ -22,7 +22,7 @@ This is a work in progress. What exists and is tested today:
 - The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections and under 10 simultaneous requests to the booking route.
 - The API runs on a free Render instance with a Neon database, and serves the React client from the same address.
 
-The React client so far is a home page that shows whether you are signed in; the screens come next. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+The React client so far has sign up, sign in and sign out; the booking screens come next. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live app:** `https://slotdesk-wfgi.onrender.com` (the API health check is `/api/health`). It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 

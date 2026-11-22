@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { Page } from '../Page';
+import { focusStyle } from '../ui';
 
 export function NotFound() {
   return (
@@ -8,7 +9,7 @@ export function NotFound() {
       <p className="text-muted mt-4">Page not found.</p>
       <Link
         to="/"
-        className="rounded-control text-accent focus-visible:outline-accent mt-4 inline-block underline focus-visible:outline-2 focus-visible:outline-offset-4"
+        className={`rounded-control text-accent mt-4 inline-block underline ${focusStyle}`}
       >
         Go to the home page
       </Link>
