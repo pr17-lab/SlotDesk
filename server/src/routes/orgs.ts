@@ -13,6 +13,7 @@ import { requireSession } from '../middleware/session.js';
 import { bookingsRouter } from './bookings.js';
 import { membersRouter } from './members.js';
 import { resourcesRouter } from './resources.js';
+import { sampleDataRouter } from './sample-data.js';
 import { servicesRouter } from './services.js';
 
 const createOrgSchema = z.object({ name: z.string().trim().min(1).max(100) });
@@ -48,6 +49,7 @@ orgRouter.use('/members', membersRouter);
 orgRouter.use('/resources', resourcesRouter);
 orgRouter.use('/services', servicesRouter);
 orgRouter.use('/bookings', bookingsRouter);
+orgRouter.use('/sample-data', sampleDataRouter);
 
 orgRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   // The organization comes from the membership check, never the params or

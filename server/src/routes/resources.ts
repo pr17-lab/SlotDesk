@@ -18,7 +18,7 @@ const nameSchema = z.string().trim().min(1).max(100);
 
 // Stores the normalised name, so 'asia/kolkata' is saved as 'Asia/Kolkata'.
 // z.NEVER tells TypeScript nothing comes back after an issue.
-const timeZoneSchema = z
+export const timeZoneSchema = z
   .string()
   .max(64)
   .transform((value, ctx) => {
