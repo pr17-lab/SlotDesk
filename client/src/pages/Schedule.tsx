@@ -162,31 +162,35 @@ export function Schedule({
       .map((booking) => ({ ...booking, booking })),
   ];
   const days = Array.from({ length: 7 }, (_, index) => addDays(from, index));
-  const itemsOn = (day: string) =>
+  const dates = new Map(
+    items.map((item) => [item, localDate(item.startsAt, timeZone)]),
+  );
+  const dayItems = days.map((day) =>
     items
-      .filter((item) => localDate(item.startsAt, timeZone) === day)
-      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
-  const dayItems = days.map(itemsOn);
+      .filter((item) => dates.get(item) === day)
+      .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)),
+  );
 
   // One row for each distinct local start time. The server steps from the
   // start of each working window, so the rows are not always 15 minutes apart.
-  const startOf = (item: Item) => localMinutes(item.startsAt, timeZone);
-  const rows = dayItems
-    .flat()
-    .filter(
-      (item, index, all) =>
-        all.findIndex((other) => startOf(other) === startOf(item)) === index,
-    )
-    .sort((a, b) => startOf(a) - startOf(b));
+  // Each item's minutes are worked out once: Intl formatters are slow to make.
+  const startMinutes = new Map(
+    items.map((item) => [item, localMinutes(item.startsAt, timeZone)]),
+  );
+  const startOf = (item: Item) => startMinutes.get(item) ?? 0;
+  const rowMinutes = [...new Set(startMinutes.values())].sort((a, b) => a - b);
   // Row 1 is the day headers, so the time rows start at 2.
-  const rowOf = (item: Item) =>
-    rows.findIndex((row) => startOf(row) === startOf(item)) + 2;
+  const rowOf = (item: Item) => rowMinutes.indexOf(startOf(item)) + 2;
+  // The label for each row comes from the first item that starts then.
+  const rows = rowMinutes.map(
+    (minutes) => items.find((item) => startOf(item) === minutes) as Item,
+  );
   // A booking covers every row from its start up to, not including, its end.
   function spanOf(item: Item) {
     const start = startOf(item);
     let end = localMinutes(item.endsAt, timeZone);
     if (end <= start) end += 1440; // it ends at or after the next midnight
-    return rows.filter((row) => startOf(row) >= start && startOf(row) < end)
+    return rowMinutes.filter((minutes) => minutes >= start && minutes < end)
       .length;
   }
 

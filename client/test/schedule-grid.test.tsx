@@ -335,3 +335,50 @@ it('shows a booked block as plain text, and free slots as buttons', async () => 
     }),
   ).toBeTruthy();
 });
+
+it('puts a later first slot in its own time row, not the day top', async () => {
+  open({
+    slots: [
+      slotAt(monday, '09:00'),
+      slotAt(monday, '09:30'),
+      slotAt(tuesday, '09:30'),
+    ],
+  });
+  await waitForPage();
+  expect(variable(slotCell('Book 9:30 AM on Tuesday 6 January'), '--row')).toBe(
+    variable(slotCell('Book 9:30 AM on Monday 5 January'), '--row'),
+  );
+});
+
+it('orders rows by the resource-zone time across UTC midnight', async () => {
+  // 12:30 AM in India is still the day before in UTC, 6:00 AM is not.
+  open({ slots: [slotAt(monday, '00:30'), slotAt(monday, '06:00')] });
+  await waitForPage();
+  expect(timeLabels()).toEqual(['12:30 AM', '6:00 AM']);
+  expect(
+    Number(variable(slotCell('Book 12:30 AM on Monday 5 January'), '--row')),
+  ).toBeLessThan(
+    Number(variable(slotCell('Book 6:00 AM on Monday 5 January'), '--row')),
+  );
+});
+
+it('renders a full week without remaking time formatters for every pair of slots', async () => {
+  // Five days of 9:00 AM to 4:30 PM starts, like the sample data. Making an
+  // Intl formatter is slow, so the grid must work out each slot's time once.
+  const slots: Slot[] = [];
+  for (const day of ['05', '06', '07', '08', '09']) {
+    for (let minute = 540; minute <= 990; minute += 15) {
+      const time = `${Math.floor(minute / 60)}:${String(minute % 60).padStart(2, '0')}`;
+      slots.push(slotAt(`2099-01-${day}`, time));
+    }
+  }
+  const formatters = vi.spyOn(Intl, 'DateTimeFormat');
+  open({ slots });
+  await screen.findByRole('button', {
+    name: 'Book 4:30 PM on Friday 9 January',
+  });
+  const made = formatters.mock.calls.length;
+  formatters.mockRestore();
+  // 817 when measured with the fix; 12,595 with one formatter per pair.
+  expect(made).toBeLessThan(2000);
+});
