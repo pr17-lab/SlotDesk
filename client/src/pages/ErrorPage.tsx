@@ -2,9 +2,11 @@ import { Link, useRouteError } from 'react-router';
 import { ApiError } from '../api';
 import { Page } from '../Page';
 import { focusStyle } from '../ui';
+import { NotFound } from './NotFound';
 
 export function ErrorPage() {
   const error = useRouteError();
+  if (error instanceof ApiError && error.status === 404) return <NotFound />;
   const message =
     error instanceof ApiError ? error.message : 'Something went wrong';
 
