@@ -24,6 +24,7 @@ function fakeServer(options: Options = {}) {
     if (path === '/api/auth/get-session' && method === 'GET') {
       return reply(200, user && { session: {}, user });
     }
+    if (path === '/api/orgs' && method === 'GET') return reply(200, []);
     if (path === '/api/auth/sign-in/email' && method === 'POST') {
       const status = options.signInStatus ?? 200;
       if (status === 401) {

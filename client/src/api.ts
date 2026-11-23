@@ -1,3 +1,5 @@
+import type { Params } from 'react-router';
+
 // Calls our own API. The app and the API share one origin, so the browser
 // sends the session cookie and the Origin header by itself.
 
@@ -52,4 +54,20 @@ function fieldMessage(data: unknown): string | undefined {
     ?.details;
   const message = Array.isArray(details) ? details[0]?.message : undefined;
   return typeof message === 'string' ? message : undefined;
+}
+
+export type Org = { id: string; name: string; role: 'owner' | 'staff' };
+
+// An action's expected failures go back to the page as data, so the page's
+// loaders still reload. Anything else is a bug and is thrown on.
+export function errorToData(error: unknown) {
+  if (!(error instanceof ApiError)) throw error;
+  return { error: error.message };
+}
+
+// The route path guarantees these exist; a missing one means a wrong URL.
+export function pathParam(params: Params, name: string) {
+  const value = params[name];
+  if (!value) throw new ApiError(404, messages[404]);
+  return value;
 }

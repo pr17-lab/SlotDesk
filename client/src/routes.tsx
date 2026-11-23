@@ -1,7 +1,13 @@
 import { redirect, type RouteObject } from 'react-router';
 import { ErrorPage } from './pages/ErrorPage';
-import { Home, homeLoader } from './pages/Home';
+import { Home, homeAction, homeLoader } from './pages/Home';
 import { NotFound } from './pages/NotFound';
+import {
+  Organization,
+  organizationAction,
+  organizationLoader,
+} from './pages/Organization';
+import { Resource, resourceAction, resourceLoader } from './pages/Resource';
 import { SignIn, signInAction } from './pages/SignIn';
 import { SignUp, signUpAction } from './pages/SignUp';
 import { Page } from './Page';
@@ -20,7 +26,12 @@ export const routes: RouteObject[] = [
       </Page>
     ),
     children: [
-      { path: '/', loader: homeLoader, Component: Home },
+      {
+        path: '/',
+        loader: homeLoader,
+        action: homeAction,
+        Component: Home,
+      },
       {
         path: '/sign-in',
         loader: redirectIfSignedIn,
@@ -37,6 +48,18 @@ export const routes: RouteObject[] = [
         path: '/sign-out',
         loader: () => redirect('/'),
         action: signOutAction,
+      },
+      {
+        path: '/orgs/:orgId',
+        loader: organizationLoader,
+        action: organizationAction,
+        Component: Organization,
+      },
+      {
+        path: '/orgs/:orgId/resources/:resourceId',
+        loader: resourceLoader,
+        action: resourceAction,
+        Component: Resource,
       },
       { path: '*', Component: NotFound },
     ],
