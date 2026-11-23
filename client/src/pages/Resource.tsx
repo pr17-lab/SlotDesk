@@ -5,10 +5,22 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from 'react-router';
-import { api, errorToData, pathParam, type Org } from '../api';
+import {
+  api,
+  ApiError,
+  errorToData,
+  pathParam,
+  type Booking,
+  type Org,
+  type Service,
+  type Slot,
+} from '../api';
 import { Page } from '../Page';
 import { requireUser } from '../session';
+import { addDays, localDate } from '../time';
 import { Breadcrumb, Button, Card, FormMessage, focusStyle } from '../ui';
+import { Bookings } from './Bookings';
+import { Schedule } from './Schedule';
 
 type Window = { weekday: number; startMinute: number; endMinute: number };
 
@@ -34,24 +46,77 @@ function toTime(minutes: number) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
-export async function resourceLoader({ params }: LoaderFunctionArgs) {
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+// The first day of the 7-day range: the `from` in the URL if it is a real
+// date in 2000 to 2099, otherwise today.
+function firstDay(from: string | null, today: string) {
+  const usable =
+    from !== null &&
+    datePattern.test(from) &&
+    from >= '2000-01-01' &&
+    from <= '2099-12-31' &&
+    addDays(from, 0) === from;
+  return usable ? from : today;
+}
+
+export async function resourceLoader({ params, request }: LoaderFunctionArgs) {
   await requireUser();
   const orgId = pathParam(params, 'orgId');
   const resourceId = pathParam(params, 'resourceId');
   const base = `/orgs/${orgId}/resources/${resourceId}`;
-  const [org, resource, hours] = await Promise.all([
+  const search = new URL(request.url).searchParams;
+
+  // Today depends on the resource's zone, so the range waits for the resource.
+  const resourceRequest = api<{ id: string; name: string; timeZone: string }>(
+    base,
+  );
+  const rangeRequest = resourceRequest.then((resource) => {
+    const today = localDate(new Date(), resource.timeZone);
+    const from = firstDay(search.get('from'), today);
+    return { today, from, to: addDays(from, 6) };
+  });
+  const [org, resource, hours, services, range, bookings] = await Promise.all([
     api<Org>(`/orgs/${orgId}`),
-    api<{ id: string; name: string; timeZone: string }>(base),
+    resourceRequest,
     api<{ windows: Window[] }>(`${base}/working-hours`),
+    api<Service[]>(`/orgs/${orgId}/services`),
+    rangeRequest,
+    rangeRequest.then(({ from, to }) =>
+      api<Booking[]>(
+        `/orgs/${orgId}/bookings?` +
+          new URLSearchParams({ resourceId, from, to }),
+      ),
+    ),
   ]);
-  return { org, resource, windows: hours.windows };
+
+  const service =
+    services.find((item) => item.id === search.get('service')) ?? services[0];
+  let slots: Slot[] = [];
+  if (service) {
+    const availability = await api<{ slots: Slot[] }>(
+      `${base}/availability?` +
+        new URLSearchParams({
+          serviceId: service.id,
+          from: range.from,
+          to: range.to,
+        }),
+    );
+    slots = availability.slots;
+  }
+  return {
+    org,
+    resource,
+    windows: hours.windows,
+    services,
+    service,
+    bookings,
+    slots,
+    ...range,
+  };
 }
 
-export async function resourceAction({ request, params }: ActionFunctionArgs) {
-  const orgId = pathParam(params, 'orgId');
-  const resourceId = pathParam(params, 'resourceId');
-  const form = await request.formData();
-
+async function saveHours(orgId: string, resourceId: string, form: FormData) {
   const windows: Window[] = [];
   const badDays: number[] = [];
   for (let weekday = 1; weekday <= 7; weekday++) {
@@ -76,6 +141,54 @@ export async function resourceAction({ request, params }: ActionFunctionArgs) {
     return errorToData(error);
   }
   return { notice: 'Working hours saved' };
+}
+
+async function bookSlot(orgId: string, resourceId: string, form: FormData) {
+  try {
+    await api(`/orgs/${orgId}/bookings`, {
+      method: 'POST',
+      body: {
+        resourceId,
+        serviceId: String(form.get('serviceId')),
+        startsAt: String(form.get('startsAt')),
+        customerName: String(form.get('customerName')),
+        customerEmail: String(form.get('customerEmail')),
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      return { error: 'This slot was just taken. Pick another time.' };
+    }
+    return errorToData(error);
+  }
+  return { notice: 'Booking confirmed' };
+}
+
+async function cancelBooking(orgId: string, form: FormData) {
+  try {
+    await api(
+      `/orgs/${orgId}/bookings/${String(form.get('bookingId'))}/cancel`,
+      {
+        method: 'POST',
+      },
+    );
+  } catch (error) {
+    return errorToData(error);
+  }
+  return { notice: 'Booking cancelled' };
+}
+
+// One action for the page's three forms; each form says which with `intent`.
+export async function resourceAction({ request, params }: ActionFunctionArgs) {
+  const orgId = pathParam(params, 'orgId');
+  const resourceId = pathParam(params, 'resourceId');
+  const form = await request.formData();
+  const intent = form.get('intent');
+
+  if (intent === 'book') return bookSlot(orgId, resourceId, form);
+  if (intent === 'cancel') return cancelBooking(orgId, form);
+  if (intent === 'hours') return saveHours(orgId, resourceId, form);
+  return { error: 'Unknown action' };
 }
 
 // The editor shows one window per day, ending before midnight. Anything else
@@ -129,6 +242,7 @@ function HoursEditor({
   return (
     <>
       <fetcher.Form method="post" className="space-y-4">
+        <input type="hidden" name="intent" value="hours" />
         <ul className="divide-border mt-2 divide-y">
           {dayNames.map((day, index) => {
             const weekday = index + 1;
@@ -243,12 +357,13 @@ function ReadOnlyWeek({ windows }: { windows: Window[] }) {
 }
 
 export function Resource() {
-  const { org, resource, windows } = useLoaderData<typeof resourceLoader>();
+  const data = useLoaderData<typeof resourceLoader>();
+  const { org, resource, windows } = data;
   const isOwner = org.role === 'owner';
   const canEdit = isOwner && fitsEditor(windows);
 
   return (
-    <Page>
+    <Page wide>
       <Breadcrumb
         items={[
           { label: 'Organizations', to: '/' },
@@ -259,7 +374,23 @@ export function Resource() {
       <h1 className="mt-2 text-2xl font-semibold">{resource.name}</h1>
       <p className="text-muted">{resource.timeZone}</p>
 
-      <div className="mt-8">
+      <div className="mt-8 space-y-6">
+        <Schedule
+          orgId={org.id}
+          timeZone={resource.timeZone}
+          services={data.services}
+          service={data.service}
+          slots={data.slots}
+          bookings={data.bookings}
+          from={data.from}
+          to={data.to}
+          today={data.today}
+        />
+        <Bookings
+          timeZone={resource.timeZone}
+          services={data.services}
+          bookings={data.bookings}
+        />
         <Card title="Working hours">
           {canEdit ? (
             <HoursEditor

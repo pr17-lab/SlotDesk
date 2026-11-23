@@ -1,3 +1,9 @@
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from '@headlessui/react';
 import { useId, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Org } from './api';
@@ -94,15 +100,54 @@ export function ListRow({
       {to ? (
         <Link
           to={to}
-          className={`rounded-control font-medium after:absolute after:inset-0 hover:underline ${focusStyle}`}
+          className={`rounded-control text-accent font-medium after:absolute after:inset-0 hover:underline ${focusStyle}`}
         >
           {name}
         </Link>
       ) : (
         <span className="font-medium">{name}</span>
       )}
-      <span className="text-muted text-sm">{detail}</span>
+      <span className="text-muted flex items-center gap-2 text-sm">
+        {detail}
+        {to && <span aria-hidden="true">›</span>}
+      </span>
     </li>
+  );
+}
+
+// A dialog with a dimmed page behind it. Headless UI traps focus inside and
+// closes it on Escape.
+export function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Dialog open onClose={onClose} className="relative z-20">
+      <DialogBackdrop className="bg-ink/40 fixed inset-0" />
+      <div className="fixed inset-0 flex items-center justify-center p-4">
+        <DialogPanel className="bg-surface border-border rounded-control w-full max-w-md border p-5 shadow-lg">
+          <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
+          {children}
+        </DialogPanel>
+      </div>
+    </Dialog>
+  );
+}
+
+export function SecondaryButton({
+  className = '',
+  ...props
+}: ComponentProps<'button'>) {
+  return (
+    <button
+      className={`border-muted bg-surface text-ink rounded-control border px-4 py-2 font-medium ${focusStyle} ${className}`}
+      {...props}
+    />
   );
 }
 

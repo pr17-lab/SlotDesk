@@ -213,3 +213,16 @@ it('filters the picker as you type and sends the picked zone', async () => {
     timeZone: 'Asia/Kolkata',
   });
 });
+
+it('marks link rows with an accent name and an arrow, and plain rows without', async () => {
+  fakeApi({ orgs: [owner], resources: [room], services: [visit] });
+  open();
+
+  const link = await screen.findByRole('link', { name: 'Room 1' });
+  expect(link.className).toContain('text-accent');
+  const arrow = link.closest('li')?.querySelector('[aria-hidden="true"]');
+  expect(arrow?.textContent).toBe('›');
+  expect(screen.getByText('Check-up').closest('li')?.textContent).not.toContain(
+    '›',
+  );
+});
