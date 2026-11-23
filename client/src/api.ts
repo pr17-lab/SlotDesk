@@ -57,6 +57,19 @@ function fieldMessage(data: unknown): string | undefined {
 }
 
 export type Org = { id: string; name: string; role: 'owner' | 'staff' };
+export type Service = { id: string; name: string; durationMinutes: number };
+export type Slot = { startsAt: string; endsAt: string };
+
+export type Booking = {
+  id: string;
+  resourceId: string;
+  serviceId: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'confirmed' | 'cancelled';
+  customerName: string;
+  customerEmail: string;
+};
 
 // An action's expected failures go back to the page as data, so the page's
 // loaders still reload. Anything else is a bug and is thrown on.
