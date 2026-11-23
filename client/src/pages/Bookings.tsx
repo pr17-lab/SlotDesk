@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { useFetcher } from 'react-router';
 import type { Booking, Service } from '../api';
-import { dayLabel, localDate, localTime, timeRange } from '../time';
+import {
+  dayLabel,
+  localDate,
+  localTime,
+  timeRange,
+  zoneAbbreviation,
+} from '../time';
 import {
   Badge,
   Card,
@@ -12,12 +18,14 @@ import {
 } from '../ui';
 import type { resourceAction } from './Resource';
 
-// "Monday 5 January" and "09:00–09:30" for one booking, in the resource's zone.
+// "Monday 5 January", "9:00–9:30 AM" and "IST" for one booking, in the
+// resource's zone.
 function when(booking: Booking, timeZone: string) {
   return {
     day: dayLabel(localDate(booking.startsAt, timeZone), true),
     range: timeRange(booking.startsAt, booking.endsAt, timeZone),
     start: localTime(booking.startsAt, timeZone),
+    zone: zoneAbbreviation(booking.startsAt, timeZone),
   };
 }
 
@@ -58,7 +66,7 @@ export function Bookings({
               >
                 <div className="min-w-0">
                   <p className="font-medium">
-                    {`${dayLabel(localDate(booking.startsAt, timeZone))}, ${time.range}`}
+                    {`${dayLabel(localDate(booking.startsAt, timeZone))}, ${time.range} ${time.zone}`}
                   </p>
                   <p>{booking.customerName}</p>
                   <p className="text-muted text-sm">{booking.customerEmail}</p>
@@ -91,7 +99,7 @@ export function Bookings({
       {chosen && !notice && (
         <Modal title="Cancel booking?" onClose={() => setChosen(null)}>
           <p className="mt-2">
-            {`${chosen.customerName}, ${when(chosen, timeZone).range} on ${when(chosen, timeZone).day}. The time becomes free again.`}
+            {`${chosen.customerName}, ${when(chosen, timeZone).range} ${when(chosen, timeZone).zone} on ${when(chosen, timeZone).day}. The time becomes free again.`}
           </p>
           <fetcher.Form method="post" className="mt-4 space-y-4">
             <input type="hidden" name="intent" value="cancel" />

@@ -144,8 +144,9 @@ async function saveHours(orgId: string, resourceId: string, form: FormData) {
 }
 
 async function bookSlot(orgId: string, resourceId: string, form: FormData) {
+  let created: Booking;
   try {
-    await api(`/orgs/${orgId}/bookings`, {
+    created = await api<Booking>(`/orgs/${orgId}/bookings`, {
       method: 'POST',
       body: {
         resourceId,
@@ -161,7 +162,7 @@ async function bookSlot(orgId: string, resourceId: string, form: FormData) {
     }
     return errorToData(error);
   }
-  return { notice: 'Booking confirmed' };
+  return { notice: 'Booking confirmed', bookingId: created.id };
 }
 
 async function cancelBooking(orgId: string, form: FormData) {

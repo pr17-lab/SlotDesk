@@ -144,7 +144,7 @@ it('shows seven day columns and a free slot as a button', async () => {
   ]);
   expect(
     column('Mon 5 Jan').getByRole('button', {
-      name: 'Book 09:00 on Monday 5 January',
+      name: 'Book 9:00 AM on Monday 5 January',
     }),
   ).toBeTruthy();
 });
@@ -165,7 +165,7 @@ it('shows a confirmed booking as a block and leaves cancelled ones out', async (
 
   await screen.findByRole('heading', { name: 'Consultation room' });
   const grid = card('Schedule');
-  expect(grid.getByText('Booked 09:00–09:30, Ravi')).toBeTruthy();
+  expect(grid.getByText('Booked 9:00–9:30 AM, Ravi')).toBeTruthy();
   expect(grid.queryByRole('button', { name: /Booked/ })).toBeNull();
   expect(grid.queryByText(/Meena/)).toBeNull();
 });
@@ -190,8 +190,8 @@ it('puts bookings around midnight in the resource-zone day', async () => {
 
   await screen.findByRole('heading', { name: 'Consultation room' });
   const monday = column('Mon 5 Jan');
-  expect(monday.getByText('Booked 00:00–00:30, Early')).toBeTruthy();
-  expect(monday.getByText('Booked 23:30–00:00, Late')).toBeTruthy();
+  expect(monday.getByText('Booked 12:00–12:30 AM, Early')).toBeTruthy();
+  expect(monday.getByText('Booked 11:30 PM–12:00 AM, Late')).toBeTruthy();
 });
 
 it('moves the range by seven days and keeps the service', async () => {
@@ -239,11 +239,11 @@ it('asks for a service first when there are none', async () => {
 async function fillAndBook() {
   await userEvent.click(
     await screen.findByRole('button', {
-      name: 'Book 09:00 on Monday 5 January',
+      name: 'Book 9:00 AM on Monday 5 January',
     }),
   );
   const dialog = await screen.findByRole('dialog', {
-    name: 'Book 09:00, Monday 5 January',
+    name: 'Book 9:00 AM, Monday 5 January',
   });
   await userEvent.type(
     within(dialog).getByLabelText('Customer name'),
@@ -275,7 +275,7 @@ it('books the slot with the exact startsAt and shows the block', async () => {
   });
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(
-    await card('Schedule').findByText('Booked 09:00–09:30, Ravi Kumar'),
+    await card('Schedule').findByText('Booked 9:00–9:30 AM, Ravi Kumar'),
   ).toBeTruthy();
 });
 
@@ -353,17 +353,19 @@ it('lists confirmed and cancelled bookings, with Cancel on confirmed only', asyn
 
   await screen.findByRole('heading', { name: 'Consultation room' });
   const [first, second] = card('Bookings').getAllByRole('listitem');
-  expect(within(first).getByText('Mon 5 Jan, 09:00–09:30')).toBeTruthy();
+  expect(within(first).getByText('Mon 5 Jan, 9:00–9:30 AM IST')).toBeTruthy();
   expect(within(first).getByText('Ravi')).toBeTruthy();
   expect(within(first).getByText('ravi@example.com')).toBeTruthy();
   expect(within(first).getByText('Consultation')).toBeTruthy();
   expect(within(first).getByText('Confirmed')).toBeTruthy();
   expect(
     within(first).getByRole('button', {
-      name: 'Cancel booking for Ravi at 09:00 on Monday 5 January',
+      name: 'Cancel booking for Ravi at 9:00 AM on Monday 5 January',
     }),
   ).toBeTruthy();
-  expect(within(second).getByText('Mon 5 Jan, 11:00–12:00')).toBeTruthy();
+  expect(
+    within(second).getByText('Mon 5 Jan, 11:00 AM–12:00 PM IST'),
+  ).toBeTruthy();
   expect(within(second).getByText('Meena')).toBeTruthy();
   expect(within(second).getByText('Long visit')).toBeTruthy();
   expect(within(second).getByText('Cancelled')).toBeTruthy();
@@ -374,7 +376,7 @@ it('lists confirmed and cancelled bookings, with Cancel on confirmed only', asyn
 async function askToCancel() {
   await userEvent.click(
     await screen.findByRole('button', {
-      name: 'Cancel booking for Ravi at 09:00 on Monday 5 January',
+      name: 'Cancel booking for Ravi at 9:00 AM on Monday 5 January',
     }),
   );
   const dialog = await screen.findByRole('dialog', {
@@ -382,7 +384,7 @@ async function askToCancel() {
   });
   expect(
     within(dialog).getByText(
-      'Ravi, 09:00–09:30 on Monday 5 January. The time becomes free again.',
+      'Ravi, 9:00–9:30 AM IST on Monday 5 January. The time becomes free again.',
     ),
   ).toBeTruthy();
   return dialog;
@@ -426,11 +428,13 @@ it('lets staff book and cancel', async () => {
 
   await userEvent.click(
     await screen.findByRole('button', {
-      name: 'Book 09:00 on Monday 5 January',
+      name: 'Book 9:00 AM on Monday 5 January',
     }),
   );
   expect(
-    await screen.findByRole('dialog', { name: 'Book 09:00, Monday 5 January' }),
+    await screen.findByRole('dialog', {
+      name: 'Book 9:00 AM, Monday 5 January',
+    }),
   ).toBeTruthy();
   await userEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(
