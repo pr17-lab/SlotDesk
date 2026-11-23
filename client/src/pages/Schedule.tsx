@@ -1,7 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Form, Link, useFetcher, useSubmit } from 'react-router';
 import type { Booking, Service, Slot } from '../api';
-import { addDays, dayLabel, localDate, localTime, timeRange } from '../time';
+import {
+  addDays,
+  dayLabel,
+  localDate,
+  localMinutes,
+  localTime,
+  timeRange,
+  zoneAbbreviation,
+} from '../time';
 import {
   Button,
   Card,
@@ -15,6 +23,15 @@ import type { resourceAction } from './Resource';
 
 // A free slot or a confirmed booking, placed in one day's column.
 type Item = { startsAt: string; endsAt: string; booking?: Booking };
+
+// Where an item sits in the grid. From `md` up, these CSS variables place it
+// in its day's column and its time's row; below `md` they do nothing.
+function cell(column: number, row: number, span?: number) {
+  // CSSProperties has no custom properties, so React gets them through a cast.
+  return { '--col': column, '--row': row, '--span': span } as CSSProperties;
+}
+const placed =
+  'md:[grid-column:var(--col)] md:[grid-row:var(--row)/span_var(--span,1)]';
 
 function BookDialog({
   slot,
@@ -49,6 +66,7 @@ function BookDialog({
           name="customerName"
           required
           maxLength={100}
+          autoFocus
         />
         <TextField
           label="Customer email"
@@ -98,6 +116,20 @@ export function Schedule({
   const [attempt, setAttempt] = useState(0);
   const fetcher = useFetcher<typeof resourceAction>({ key: `book-${attempt}` });
   const submit = useSubmit();
+  const newBlock = useRef<HTMLLIElement>(null);
+
+  const newBookingId =
+    fetcher.data && 'bookingId' in fetcher.data
+      ? fetcher.data.bookingId
+      : undefined;
+  const hasNewBlock = bookings.some(
+    (booking) => booking.id === newBookingId && booking.status === 'confirmed',
+  );
+  // The new block only exists once the page has reloaded after booking, so
+  // wait for it, then move the focus there.
+  useEffect(() => {
+    if (hasNewBlock) newBlock.current?.focus();
+  }, [hasNewBlock]);
 
   if (!service) {
     return (
@@ -134,6 +166,29 @@ export function Schedule({
     items
       .filter((item) => localDate(item.startsAt, timeZone) === day)
       .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  const dayItems = days.map(itemsOn);
+
+  // One row for each distinct local start time. The server steps from the
+  // start of each working window, so the rows are not always 15 minutes apart.
+  const startOf = (item: Item) => localMinutes(item.startsAt, timeZone);
+  const rows = dayItems
+    .flat()
+    .filter(
+      (item, index, all) =>
+        all.findIndex((other) => startOf(other) === startOf(item)) === index,
+    )
+    .sort((a, b) => startOf(a) - startOf(b));
+  // Row 1 is the day headers, so the time rows start at 2.
+  const rowOf = (item: Item) =>
+    rows.findIndex((row) => startOf(row) === startOf(item)) + 2;
+  // A booking covers every row from its start up to, not including, its end.
+  function spanOf(item: Item) {
+    const start = startOf(item);
+    let end = localMinutes(item.endsAt, timeZone);
+    if (end <= start) end += 1440; // it ends at or after the next midnight
+    return rows.filter((row) => startOf(row) >= start && startOf(row) < end)
+      .length;
+  }
 
   const linkStyle = `border-border bg-surface text-ink rounded-control hover:bg-background border px-3 py-1.5 text-sm font-medium transition-colors ${focusStyle}`;
 
@@ -174,62 +229,102 @@ export function Schedule({
       <p className="mt-3 font-medium">
         {`${dayLabel(from)} to ${dayLabel(to)}`}
       </p>
-      <p className="text-muted text-sm">{`All times are in ${timeZone}.`}</p>
+      <p className="text-muted text-sm">
+        {`All times are in ${timeZone} (${zoneAbbreviation(new Date(), timeZone)}).`}
+      </p>
       <FormMessage result={{ notice }} />
 
-      <ol className="border-border rounded-control bg-border mt-4 grid max-h-[32rem] gap-px overflow-y-auto border md:grid-cols-7">
-        {days.map((day) => {
-          const dayItems = itemsOn(day);
-          return (
-            <li key={day} className="bg-surface min-w-0">
-              <h3 className="bg-surface border-border sticky top-0 z-10 flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-2 text-sm font-semibold">
-                {dayLabel(day)}
-                {day === today && (
-                  <span className="bg-accent text-accent-ink rounded-full px-2 py-0.5 text-xs font-medium">
-                    Today
-                  </span>
-                )}
-              </h3>
-              {dayItems.length === 0 ? (
-                <p className="text-muted p-2 text-sm">No free times</p>
-              ) : (
-                <ul className="flex flex-wrap gap-2 p-2 md:flex-col md:flex-nowrap">
-                  {dayItems.map((item) => (
-                    <li key={item.startsAt + (item.booking?.id ?? '')}>
-                      {item.booking ? (
-                        <div className="bg-accent text-accent-ink rounded-control px-2 py-1 text-sm">
-                          <span aria-hidden="true">
-                            <span className="block text-xs font-medium whitespace-nowrap">
-                              {timeRange(item.startsAt, item.endsAt, timeZone)}
-                            </span>
-                            <span className="block truncate">
-                              {item.booking.customerName}
-                            </span>
-                          </span>
-                          <span className="sr-only">
-                            {`Booked ${timeRange(item.startsAt, item.endsAt, timeZone)}, ${item.booking.customerName}`}
-                          </span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          aria-label={`Book ${localTime(item.startsAt, timeZone)} on ${dayLabel(day, true)}`}
-                          onClick={() => {
-                            setChosen(item);
-                            setAttempt(attempt + 1);
-                          }}
-                          className={`border-accent text-accent rounded-control hover:bg-accent hover:text-accent-ink w-full border px-2 py-1 text-sm font-medium transition-colors ${focusStyle}`}
-                        >
-                          {localTime(item.startsAt, timeZone)}
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+      {/* One grid for phone and laptop. From md up, each day's <li> and its
+          list use display: contents, so all their items join this grid. */}
+      <ol className="mt-4 md:grid md:grid-cols-[auto_repeat(7,minmax(0,1fr))] md:gap-x-2 md:gap-y-1">
+        {rows.map((row) => (
+          <li
+            key={startOf(row)}
+            aria-hidden="true"
+            data-time-label
+            style={cell(1, rowOf(row))}
+            className="text-muted hidden pt-2 text-xs whitespace-nowrap md:[grid-column:var(--col)] md:[grid-row:var(--row)] md:block"
+          >
+            {localTime(row.startsAt, timeZone)}
+          </li>
+        ))}
+        {days.map((day, dayIndex) => (
+          <li
+            key={day}
+            className="border-border rounded-control mb-3 border md:contents"
+          >
+            <h3
+              style={cell(dayIndex + 2, 1)}
+              className="bg-surface border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-2 text-sm font-semibold md:sticky md:top-0 md:z-10 md:[grid-column:var(--col)] md:[grid-row:var(--row)]"
+            >
+              {dayLabel(day)}
+              {day === today && (
+                <span className="bg-accent text-accent-ink rounded-full px-2 py-0.5 text-xs font-medium">
+                  Today
+                </span>
               )}
-            </li>
-          );
-        })}
+            </h3>
+            {dayItems[dayIndex].length === 0 ? (
+              <p
+                data-day={day}
+                style={cell(dayIndex + 2, 2, Math.max(rows.length, 1))}
+                className={`text-muted p-2 text-sm ${placed}`}
+              >
+                No free times
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-2 p-2 md:contents">
+                {/* shortcut: two items with the same start on one day (a
+                    daylight-saving fall-back) overlap in one cell; stack them
+                    if that ever matters. */}
+                {dayItems[dayIndex].map((item) =>
+                  item.booking ? (
+                    <li
+                      key={item.booking.id}
+                      ref={item.booking.id === newBookingId ? newBlock : null}
+                      tabIndex={-1}
+                      data-day={day}
+                      data-new={item.booking.id === newBookingId || undefined}
+                      style={cell(dayIndex + 2, rowOf(item), spanOf(item))}
+                      className={`bg-accent/10 border-accent text-ink rounded-control border-l-4 px-1 py-1 text-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
+                    >
+                      <span aria-hidden="true">
+                        <span className="block text-[11px] font-medium whitespace-nowrap">
+                          {timeRange(item.startsAt, item.endsAt, timeZone)}
+                        </span>
+                        <span className="line-clamp-2">
+                          {item.booking.customerName}
+                        </span>
+                      </span>
+                      <span className="sr-only">
+                        {`Booked ${timeRange(item.startsAt, item.endsAt, timeZone)}, ${item.booking.customerName}`}
+                      </span>
+                    </li>
+                  ) : (
+                    <li
+                      key={item.startsAt}
+                      data-day={day}
+                      style={cell(dayIndex + 2, rowOf(item))}
+                      className={placed}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Book ${localTime(item.startsAt, timeZone)} on ${dayLabel(day, true)}`}
+                        onClick={() => {
+                          setChosen(item);
+                          setAttempt(attempt + 1);
+                        }}
+                        className={`border-accent text-accent bg-surface rounded-control hover:ring-accent focus-visible:ring-accent w-full border px-2 py-1 text-sm font-medium hover:ring-2 focus-visible:ring-2 ${focusStyle}`}
+                      >
+                        {localTime(item.startsAt, timeZone)}
+                      </button>
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+          </li>
+        ))}
       </ol>
 
       {chosen && !notice && (

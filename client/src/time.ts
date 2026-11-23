@@ -14,18 +14,59 @@ export function localDate(instant: string | Date, timeZone: string) {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
-// "09:15" for an instant. Midnight shows as "00:00".
+// The hour, minute and AM/PM of an instant in 12-hour form.
+function clockParts(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).formatToParts(new Date(instant));
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value ?? '';
+  return {
+    hour: part('hour'),
+    minute: part('minute'),
+    period: part('dayPeriod'),
+  };
+}
+
+// "9:15 AM" for an instant. Joined by hand so the space is a normal space.
 export function localTime(instant: string, timeZone: string) {
-  return new Intl.DateTimeFormat('en-GB', {
+  const { hour, minute, period } = clockParts(instant, timeZone);
+  return `${hour}:${minute} ${period}`;
+}
+
+// "9:00–9:30 AM", or "11:30 AM–12:00 PM" when the two ends differ in AM/PM.
+export function timeRange(startsAt: string, endsAt: string, timeZone: string) {
+  const start = clockParts(startsAt, timeZone);
+  const end = clockParts(endsAt, timeZone);
+  if (start.period !== end.period) {
+    return `${localTime(startsAt, timeZone)}–${localTime(endsAt, timeZone)}`;
+  }
+  return `${start.hour}:${start.minute}–${end.hour}:${end.minute} ${end.period}`;
+}
+
+// "IST", "GMT-5" ... the short zone name at that instant (it can change with
+// daylight saving). en-IN gives "IST" for India, where en-US would not.
+export function zoneAbbreviation(instant: string | Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    timeZoneName: 'short',
+  }).formatToParts(new Date(instant));
+  return parts.find((item) => item.type === 'timeZoneName')?.value ?? timeZone;
+}
+
+// Minutes since local midnight for an instant, like 540 for 09:00.
+export function localMinutes(instant: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone,
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-  }).format(new Date(instant));
-}
-
-export function timeRange(startsAt: string, endsAt: string, timeZone: string) {
-  return `${localTime(startsAt, timeZone)}–${localTime(endsAt, timeZone)}`;
+  }).formatToParts(new Date(instant));
+  const part = (type: string) =>
+    Number(parts.find((item) => item.type === type)?.value);
+  return part('hour') * 60 + part('minute');
 }
 
 // Calendar arithmetic on a "YYYY-MM-DD" string.

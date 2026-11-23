@@ -194,7 +194,10 @@ export function FormMessage({
   }
   if (result?.notice) {
     return (
-      <p role="status" className="text-accent text-sm font-medium">
+      <p
+        role="status"
+        className="bg-accent/10 text-accent rounded-control motion-safe:animate-fade-in mt-3 px-3 py-2 text-sm font-medium"
+      >
         {result.notice}
       </p>
     );
