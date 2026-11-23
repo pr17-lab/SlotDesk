@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type ComponentProps } from 'react';
 import {
   useFetcher,
   useLoaderData,
@@ -17,8 +17,15 @@ import {
 } from '../api';
 import { Page } from '../Page';
 import { requireUser } from '../session';
-import { addDays, localDate } from '../time';
-import { Breadcrumb, Button, Card, FormMessage, focusStyle } from '../ui';
+import { addDays, localDate, minutesLabel } from '../time';
+import {
+  Breadcrumb,
+  Button,
+  Card,
+  FormMessage,
+  SecondaryButton,
+  focusStyle,
+} from '../ui';
 import { Bookings } from './Bookings';
 import { Schedule } from './Schedule';
 
@@ -212,7 +219,42 @@ function rowFor(window: Window | undefined): Row {
   };
 }
 
-const timeInputStyle = `border-muted bg-surface text-ink rounded-control border px-2 py-1 ${focusStyle}`;
+// Minutes from midnight offered in the time selects: every 15 minutes. A day
+// cannot end at midnight, so the last end is 23:59.
+const startChoices = Array.from({ length: 96 }, (_, step) => step * 15);
+const endChoices = [...startChoices.slice(1), 1439];
+
+// Option values stay "HH:MM"; the labels are 12-hour. A saved time that is not
+// on the list (set through the API) is added in its place so it is not changed.
+function TimeSelect({
+  choices,
+  value,
+  ...props
+}: { choices: number[]; value: string } & ComponentProps<'select'>) {
+  const saved = toMinutes(value);
+  // Kept between renders: a week has 14 selects of ~96 options each, and
+  // rebuilding them on every page update is slow.
+  const options = useMemo(() => {
+    const minutes = choices.includes(saved)
+      ? choices
+      : [...choices, saved].sort((a, b) => a - b);
+    return minutes.map((option) => (
+      <option key={option} value={toTime(option)}>
+        {minutesLabel(option)}
+      </option>
+    ));
+  }, [choices, saved]);
+
+  return (
+    <select
+      value={value}
+      className={`border-muted bg-surface text-ink rounded-control border px-2 py-1 ${focusStyle}`}
+      {...props}
+    >
+      {options}
+    </select>
+  );
+}
 
 function HoursEditor({
   windows,
@@ -279,32 +321,28 @@ function HoursEditor({
                       <span aria-hidden="true" className="text-muted text-sm">
                         Start
                       </span>
-                      <input
-                        type="time"
+                      <TimeSelect
+                        choices={startChoices}
                         name={`start-${weekday}`}
                         aria-label={`${day} start`}
                         value={row.start}
                         onChange={(event) =>
                           change(index, { start: event.target.value })
                         }
-                        required
-                        className={timeInputStyle}
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <span aria-hidden="true" className="text-muted text-sm">
                         End
                       </span>
-                      <input
-                        type="time"
+                      <TimeSelect
+                        choices={endChoices}
                         name={`end-${weekday}`}
                         aria-label={`${day} end`}
                         value={row.end}
                         onChange={(event) =>
                           change(index, { end: event.target.value })
                         }
-                        required
-                        className={timeInputStyle}
                       />
                     </div>
                   </>
@@ -322,18 +360,14 @@ function HoursEditor({
           <Button type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save working hours'}
           </Button>
-          <button
-            type="button"
-            onClick={copyMonday}
-            className={`border-muted bg-surface text-ink rounded-control border px-4 py-2 font-medium ${focusStyle}`}
-          >
+          <SecondaryButton type="button" onClick={copyMonday}>
             Copy Monday to weekdays
-          </button>
+          </SecondaryButton>
         </div>
         <FormMessage result={fetcher.data} />
       </fetcher.Form>
       <p className="text-muted mt-4 text-sm">
-        {`Times are in ${timeZone}. A day can't stay open until midnight; the latest end is 23:59.`}
+        {`Times are in ${timeZone}. A day can't stay open until midnight; the latest end is 11:59 PM.`}
       </p>
     </>
   );
@@ -346,7 +380,10 @@ function ReadOnlyWeek({ windows }: { windows: Window[] }) {
         const times = windows
           .filter((window) => window.weekday === index + 1)
           .sort((a, b) => a.startMinute - b.startMinute)
-          .map((w) => `${toTime(w.startMinute)} to ${toTime(w.endMinute)}`);
+          .map(
+            (w) =>
+              `${minutesLabel(w.startMinute)} to ${minutesLabel(w.endMinute)}`,
+          );
         return (
           <li key={day} className="py-3">
             {`${day} ${times.length > 0 ? times.join(', ') : 'closed'}`}

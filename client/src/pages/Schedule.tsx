@@ -16,6 +16,7 @@ import {
   FormMessage,
   Modal,
   SecondaryButton,
+  SecondaryLink,
   TextField,
   focusStyle,
 } from '../ui';
@@ -194,8 +195,6 @@ export function Schedule({
       .length;
   }
 
-  const linkStyle = `border-border bg-surface text-ink rounded-control hover:bg-background border px-3 py-1.5 text-sm font-medium transition-colors ${focusStyle}`;
-
   return (
     <Card title="Schedule">
       <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
@@ -219,15 +218,15 @@ export function Schedule({
           </select>
         </Form>
         <div className="flex flex-wrap gap-2">
-          <Link to={rangeLink(addDays(from, -7))} className={linkStyle}>
+          <SecondaryLink small to={rangeLink(addDays(from, -7))}>
             Previous 7 days
-          </Link>
-          <Link to={rangeLink(today)} className={linkStyle}>
+          </SecondaryLink>
+          <SecondaryLink small to={rangeLink(today)}>
             Today
-          </Link>
-          <Link to={rangeLink(addDays(from, 7))} className={linkStyle}>
+          </SecondaryLink>
+          <SecondaryLink small to={rangeLink(addDays(from, 7))}>
             Next 7 days
-          </Link>
+          </SecondaryLink>
         </div>
       </div>
       <p className="mt-3 font-medium">

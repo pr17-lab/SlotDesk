@@ -75,19 +75,21 @@ export function Bookings({
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Badge>{confirmed ? 'Confirmed' : 'Cancelled'}</Badge>
+                  <Badge tone={confirmed ? 'accent' : 'neutral'}>
+                    {confirmed ? 'Confirmed' : 'Cancelled'}
+                  </Badge>
                   {confirmed && (
-                    <button
+                    <SecondaryButton
+                      small
                       type="button"
                       aria-label={`Cancel booking for ${booking.customerName} at ${time.start} on ${time.day}`}
                       onClick={() => {
                         setChosen(booking);
                         setAttempt(attempt + 1);
                       }}
-                      className={`border-muted bg-surface text-ink rounded-control hover:bg-background border px-3 py-1.5 text-sm font-medium transition-colors ${focusStyle}`}
                     >
                       Cancel
-                    </button>
+                    </SecondaryButton>
                   )}
                 </div>
               </li>

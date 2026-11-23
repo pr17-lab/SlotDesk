@@ -18,6 +18,15 @@
     'Helvetica Neue', Arial, sans-serif;
   --radius-control: 0.5rem;
   --animate-fade-in: fade-in 0.4s ease-out;
+  --animate-loading: loading 1.2s ease-in-out infinite;
+  @keyframes loading {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
   @keyframes fade-in {
     from {
       opacity: 0;

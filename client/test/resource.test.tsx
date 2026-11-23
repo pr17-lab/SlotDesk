@@ -55,8 +55,7 @@ it('saves the minutes, leaves closed days out and says so', async () => {
 
   await screen.findByRole('heading', { name: 'Room 1' });
   await userEvent.click(field('Open on Saturday'));
-  await userEvent.clear(field('Saturday end'));
-  await userEvent.type(field('Saturday end'), '12:30');
+  await userEvent.selectOptions(field('Saturday end'), '12:30');
   await userEvent.click(field('Open on Friday'));
   await userEvent.click(
     screen.getByRole('button', { name: 'Save working hours' }),
@@ -80,8 +79,7 @@ it('shows end before start on its row and sends nothing', async () => {
   const api = open();
 
   await screen.findByRole('heading', { name: 'Room 1' });
-  await userEvent.clear(field('Tuesday end'));
-  await userEvent.type(field('Tuesday end'), '08:00');
+  await userEvent.selectOptions(field('Tuesday end'), '08:00');
   await userEvent.click(
     screen.getByRole('button', { name: 'Save working hours' }),
   );
@@ -101,7 +99,7 @@ it('shows a day with two windows as read-only text', async () => {
   });
 
   expect(
-    await screen.findByText(/Monday 09:00 to 12:00, 13:00 to 17:00/),
+    await screen.findByText(/Monday 9:00 AM to 12:00 PM, 1:00 PM to 5:00 PM/),
   ).toBeTruthy();
   expect(
     screen.getByText(
@@ -138,11 +136,79 @@ it('copies Monday to Tuesday through Friday and leaves the weekend', async () =>
 it('shows staff the read-only week without a save button or notice', async () => {
   open({ org: staff });
 
-  expect(await screen.findByText(/Monday 09:00 to 17:00/)).toBeTruthy();
+  expect(await screen.findByText(/Monday 9:00 AM to 5:00 PM/)).toBeTruthy();
   expect(screen.getByText(/Saturday closed/)).toBeTruthy();
   expect(
     screen.queryByRole('button', { name: 'Save working hours' }),
   ).toBeNull();
   expect(screen.queryByText(/only be edited through the API/)).toBeNull();
   expect(screen.queryByLabelText('Open on Monday')).toBeNull();
+});
+
+// The time fields are selects now. The cast is safe: getByLabelText finds one.
+const timeSelect = (label: string) =>
+  screen.getByLabelText(label) as HTMLSelectElement;
+
+const optionLabels = (select: HTMLSelectElement) =>
+  Array.from(select.options).map((option) => option.textContent);
+
+it('offers 15-minute 12-hour times that send 24-hour values', async () => {
+  open();
+
+  await screen.findByRole('heading', { name: 'Room 1' });
+  const start = timeSelect('Monday start');
+  expect(optionLabels(start)[0]).toBe('12:00 AM');
+  expect(optionLabels(start).at(-1)).toBe('11:45 PM');
+  expect(start.options).toHaveLength(96);
+  const end = timeSelect('Monday end');
+  expect(optionLabels(end).at(-1)).toBe('11:59 PM');
+  expect(end.options[end.options.length - 1].value).toBe('23:59');
+  const nine = Array.from(start.options).find(
+    (option) => option.textContent === '9:00 AM',
+  );
+  expect(nine?.value).toBe('09:00');
+});
+
+it('keeps a saved time that is not on the 15-minute list', async () => {
+  const api = open({
+    windows: [{ weekday: 1, startMinute: 550, endMinute: 1020 }],
+  });
+
+  await screen.findByRole('heading', { name: 'Room 1' });
+  const start = timeSelect('Monday start');
+  expect(start.selectedOptions[0].textContent).toBe('9:10 AM');
+  const labels = optionLabels(start);
+  expect(labels.indexOf('9:10 AM')).toBe(labels.indexOf('9:00 AM') + 1);
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Save working hours' }),
+  );
+
+  expect(await screen.findByText('Working hours saved')).toBeTruthy();
+  expect(api.callsTo('PUT', hoursPath)[0].body).toEqual({
+    windows: [{ weekday: 1, startMinute: 550, endMinute: 1020 }],
+  });
+});
+
+it('sends 1439 when the end is 11:59 PM', async () => {
+  const api = open();
+
+  await screen.findByRole('heading', { name: 'Room 1' });
+  await userEvent.selectOptions(timeSelect('Friday end'), '11:59 PM');
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Save working hours' }),
+  );
+
+  expect(await screen.findByText('Working hours saved')).toBeTruthy();
+  const body = api.callsTo('PUT', hoursPath)[0].body as { windows: Window[] };
+  expect(body.windows.find((w) => w.weekday === 5)?.endMinute).toBe(1439);
+});
+
+it('says the latest end is 11:59 PM', async () => {
+  open();
+
+  expect(
+    await screen.findByText(
+      "Times are in Europe/London. A day can't stay open until midnight; the latest end is 11:59 PM.",
+    ),
+  ).toBeTruthy();
 });

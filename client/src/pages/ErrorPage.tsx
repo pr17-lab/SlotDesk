@@ -1,7 +1,7 @@
 import { Link, useRouteError } from 'react-router';
 import { ApiError } from '../api';
 import { Page } from '../Page';
-import { focusStyle } from '../ui';
+import { Button, Card, focusStyle } from '../ui';
 import { NotFound } from './NotFound';
 
 export function ErrorPage() {
@@ -12,16 +12,28 @@ export function ErrorPage() {
 
   return (
     <Page>
-      <h1 className="text-2xl font-semibold">SlotDesk</h1>
-      <p className="text-danger mt-4">{message}</p>
-      {error instanceof ApiError && error.status === 401 && (
-        <Link
-          to="/sign-in"
-          className={`rounded-control text-accent mt-4 inline-block underline ${focusStyle}`}
-        >
-          Sign in
-        </Link>
-      )}
+      <Card title="That didn't work">
+        <p className="text-danger mt-2">{message}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <Button type="button" onClick={() => window.location.reload()}>
+            Try again
+          </Button>
+          {error instanceof ApiError && error.status === 401 && (
+            <Link
+              to="/sign-in"
+              className={`rounded-control text-accent underline ${focusStyle}`}
+            >
+              Sign in
+            </Link>
+          )}
+          <Link
+            to="/"
+            className={`rounded-control text-accent underline ${focusStyle}`}
+          >
+            Go to the home page
+          </Link>
+        </div>
+      </Card>
     </Page>
   );
 }

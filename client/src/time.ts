@@ -88,3 +88,11 @@ export function dayLabel(date: string, long = false) {
     .format(new Date(`${date}T00:00:00Z`))
     .replace(',', '');
 }
+
+// "9:00 AM" for minutes after midnight: 0 is "12:00 AM", 720 is "12:00 PM".
+export function minutesLabel(minutes: number) {
+  const hour = Math.floor(minutes / 60);
+  const minute = String(minutes % 60).padStart(2, '0');
+  const period = hour < 12 ? 'AM' : 'PM';
+  return `${hour % 12 || 12}:${minute} ${period}`;
+}
