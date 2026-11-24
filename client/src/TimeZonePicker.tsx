@@ -1,14 +1,13 @@
+import { useId, useState } from 'react';
 import {
   Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
   ComboboxInput,
-  ComboboxOption,
-  ComboboxOptions,
-  Description,
-  Field,
-  Label,
-} from '@headlessui/react';
-import { useState } from 'react';
-import { focusStyle } from './ui';
+  ComboboxItem,
+  ComboboxList,
+} from '@/components/ui/combobox';
+import { Label } from '@/components/ui/label';
 
 // Browsers still say Asia/Calcutta; the server only knows the new name.
 export function toDisplayZone(zone: string) {
@@ -34,52 +33,42 @@ function offsetOf(zone: string) {
 }
 
 export function TimeZonePicker({ hint }: { hint: string }) {
-  const [zone, setZone] = useState(browserTimeZone);
-  const [query, setQuery] = useState('');
-  const matches = zones
-    .filter((name) => name.toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 50);
+  const id = useId();
+  const [zone, setZone] = useState<string | null>(browserTimeZone);
 
   return (
-    <Field>
-      <Label className="block text-sm font-medium">Time zone</Label>
+    <div>
+      <Label htmlFor={id}>Time zone</Label>
       {/* The Combobox's own name prop adds the hidden timeZone field. */}
       <Combobox
+        items={zones}
         value={zone}
-        onChange={(picked) => picked && setZone(picked)}
-        onClose={() => setQuery('')}
+        onValueChange={(picked) => picked && setZone(picked)}
         name="timeZone"
+        limit={50}
       >
-        <div className="relative">
-          <ComboboxInput
-            displayValue={(name: string) => name}
-            onChange={(event) => setQuery(event.target.value)}
-            className={`border-input bg-card text-foreground mt-1 block w-full rounded-lg border px-3 py-2 ${focusStyle}`}
-          />
-          <ComboboxOptions className="bg-card border-border absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border py-1 shadow-md">
-            {matches.length === 0 && (
-              <p className="text-muted-foreground px-3 py-2 text-sm">
-                No matching time zone
-              </p>
-            )}
-            {matches.map((name) => (
-              <ComboboxOption
-                key={name}
-                value={name}
-                className="data-focus:bg-background flex cursor-pointer items-center justify-between gap-3 px-3 py-2 data-selected:font-semibold"
-              >
+        <ComboboxInput
+          id={id}
+          className="mt-1 w-full"
+          aria-describedby={`${id}-hint`}
+        />
+        <ComboboxContent>
+          <ComboboxEmpty>No matching time zone</ComboboxEmpty>
+          <ComboboxList>
+            {(name: string) => (
+              <ComboboxItem key={name} value={name}>
                 <span>{name}</span>
-                <span className="text-muted-foreground text-sm font-normal">
+                <span className="text-muted-foreground ml-auto text-sm">
                   {offsetOf(name)}
                 </span>
-              </ComboboxOption>
-            ))}
-          </ComboboxOptions>
-        </div>
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
       </Combobox>
-      <Description className="text-muted-foreground mt-1 text-sm">
+      <p id={`${id}-hint`} className="text-muted-foreground mt-1 text-sm">
         {hint}
-      </Description>
-    </Field>
+      </p>
+    </div>
   );
 }

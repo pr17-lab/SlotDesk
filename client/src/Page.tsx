@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Form, Link, useNavigation, useRouteLoaderData } from 'react-router';
+import { Button } from '@/components/ui/button';
 import type { Session } from './session';
 import { focusStyle } from './ui';
 
@@ -43,12 +44,9 @@ export function Page({
                 {session.user.email}
               </span>
               <Form method="post" action="/sign-out" className="shrink-0">
-                <button
-                  type="submit"
-                  className={`text-primary rounded-lg text-sm whitespace-nowrap underline hover:no-underline ${focusStyle}`}
-                >
+                <Button type="submit" variant="ghost" size="sm">
                   Sign out
-                </button>
+                </Button>
               </Form>
             </div>
           )}

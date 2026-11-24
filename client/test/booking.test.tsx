@@ -391,6 +391,22 @@ async function askToCancel() {
   return dialog;
 }
 
+it('returns focus to the row Cancel button after Keep booking', async () => {
+  open({ bookings: [booking()] });
+
+  const dialog = await askToCancel();
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: 'Keep booking' }),
+  );
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(document.activeElement).toBe(
+    screen.getByRole('button', {
+      name: 'Cancel booking for Ravi at 9:00 AM on Monday 5 January',
+    }),
+  );
+});
+
 it('closes the cancel dialog on Keep booking and sends nothing', async () => {
   const api = open({ bookings: [booking()] });
 

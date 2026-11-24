@@ -15,17 +15,16 @@ import {
   type Service,
   type Slot,
 } from '../api';
+import { Button } from '@/components/ui/button';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
+import { Switch } from '@/components/ui/switch';
 import { Page } from '../Page';
 import { requireUser } from '../session';
 import { addDays, localDate, minutesLabel } from '../time';
-import {
-  Breadcrumb,
-  Button,
-  Card,
-  FormMessage,
-  SecondaryButton,
-  focusStyle,
-} from '../ui';
+import { Breadcrumb, Card, FormMessage, SecondaryButton } from '../ui';
 import { Bookings } from './Bookings';
 import { Schedule } from './Schedule';
 
@@ -230,7 +229,7 @@ function TimeSelect({
   choices,
   value,
   ...props
-}: { choices: number[]; value: string } & ComponentProps<'select'>) {
+}: { choices: number[]; value: string } & ComponentProps<typeof NativeSelect>) {
   const saved = toMinutes(value);
   // Kept between renders: a week has 14 selects of ~96 options each, and
   // rebuilding them on every page update is slow.
@@ -239,20 +238,16 @@ function TimeSelect({
       ? choices
       : [...choices, saved].sort((a, b) => a - b);
     return minutes.map((option) => (
-      <option key={option} value={toTime(option)}>
+      <NativeSelectOption key={option} value={toTime(option)}>
         {minutesLabel(option)}
-      </option>
+      </NativeSelectOption>
     ));
   }, [choices, saved]);
 
   return (
-    <select
-      value={value}
-      className={`border-input bg-card text-foreground rounded-lg border px-2 py-1 ${focusStyle}`}
-      {...props}
-    >
+    <NativeSelect value={value} {...props}>
       {options}
-    </select>
+    </NativeSelect>
   );
 }
 
@@ -296,25 +291,17 @@ function HoursEditor({
                 className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
               >
                 <span className="w-24 font-medium">{day}</span>
-                <label className="relative inline-flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
+                <div className="flex items-center gap-2">
+                  <Switch
                     name={`open-${weekday}`}
                     aria-label={`Open on ${day}`}
                     checked={row.open}
-                    onChange={(event) =>
-                      change(index, { open: event.target.checked })
-                    }
-                    className="peer sr-only"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="bg-input peer-checked:bg-primary peer-focus-visible:outline-primary after:bg-card relative h-6 w-11 rounded-full transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:transition-transform peer-checked:after:translate-x-5"
+                    onCheckedChange={(open) => change(index, { open })}
                   />
                   <span className="text-muted-foreground w-14 text-sm">
                     {row.open ? 'Open' : 'Closed'}
                   </span>
-                </label>
+                </div>
                 {row.open && (
                   <>
                     <div className="flex items-center gap-2">

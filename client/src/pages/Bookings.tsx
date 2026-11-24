@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useFetcher } from 'react-router';
+import { Button } from '@/components/ui/button';
+import { DialogClose } from '@/components/ui/dialog';
 import type { Booking, Service } from '../api';
 import {
   dayLabel,
@@ -8,14 +10,7 @@ import {
   timeRange,
   zoneAbbreviation,
 } from '../time';
-import {
-  Badge,
-  Card,
-  FormMessage,
-  Modal,
-  SecondaryButton,
-  focusStyle,
-} from '../ui';
+import { Badge, Card, FormMessage, Modal, SecondaryButton } from '../ui';
 import type { resourceAction } from './Resource';
 
 // "Monday 5 January", "9:00–9:30 AM" and "IST" for one booking, in the
@@ -112,16 +107,12 @@ export function Bookings({
             <input type="hidden" name="bookingId" value={chosen.id} />
             <FormMessage result={fetcher.data} />
             <div className="flex flex-wrap gap-3">
-              <SecondaryButton type="button" onClick={() => setChosen(null)}>
+              <DialogClose render={<SecondaryButton type="button" />}>
                 Keep booking
-              </SecondaryButton>
-              <button
-                type="submit"
-                disabled={cancelling}
-                className={`bg-destructive text-primary-foreground rounded-lg px-4 py-2 font-medium disabled:opacity-60 ${focusStyle}`}
-              >
+              </DialogClose>
+              <Button type="submit" variant="destructive" disabled={cancelling}>
                 {cancelling ? 'Cancelling…' : 'Cancel booking'}
-              </button>
+              </Button>
             </div>
           </fetcher.Form>
         </Modal>

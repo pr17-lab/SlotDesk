@@ -1,12 +1,12 @@
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogPanel,
-  DialogTitle,
-} from '@headlessui/react';
-import { useId, type ComponentProps, type ReactNode } from 'react';
+import { useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Org } from './api';
+import { Badge as ShadcnBadge } from '@/components/ui/badge';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 // One focus look for every link, button and field.
 export const focusStyle =
@@ -23,13 +23,11 @@ export function TextField({ label, hint, ...inputProps }: TextFieldProps) {
 
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium">
-        {label}
-      </label>
-      <input
+      <Label htmlFor={id}>{label}</Label>
+      <Input
         id={id}
         aria-describedby={hint ? hintId : undefined}
-        className={`border-input bg-card text-foreground mt-1 block w-full rounded-lg border px-3 py-2 ${focusStyle}`}
+        className="mt-1"
         {...inputProps}
       />
       {hint && (
@@ -38,15 +36,6 @@ export function TextField({ label, hint, ...inputProps }: TextFieldProps) {
         </p>
       )}
     </div>
-  );
-}
-
-export function Button({ className = '', ...props }: ComponentProps<'button'>) {
-  return (
-    <button
-      className={`bg-primary text-primary-foreground rounded-lg px-4 py-2 font-medium disabled:opacity-60 ${focusStyle} ${className}`}
-      {...props}
-    />
   );
 }
 
@@ -85,11 +74,9 @@ export function Badge({
   tone?: keyof typeof badgeTones;
 }) {
   return (
-    <span
-      className={`${badgeTones[tone]} rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap`}
-    >
+    <ShadcnBadge variant="outline" className={badgeTones[tone]}>
       {children}
-    </span>
+    </ShadcnBadge>
   );
 }
 
@@ -128,8 +115,8 @@ export function ListRow({
   );
 }
 
-// A dialog with a dimmed page behind it. Headless UI traps focus inside and
-// closes it on Escape.
+// A dialog with a dimmed page behind it. A close (Escape, the backdrop, a
+// DialogClose button) finishes first; only then does the parent unmount it.
 export function Modal({
   title,
   onClose,
@@ -139,46 +126,60 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(true);
+  // Opened without a trigger, so focus goes back to what had it before. The
+  // cast is because activeElement is typed as a plain Element.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null);
+
   return (
-    <Dialog open onClose={onClose} className="relative z-20">
-      <DialogBackdrop className="bg-foreground/40 fixed inset-0" />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="bg-card border-border w-full max-w-md rounded-lg border p-5 shadow-lg">
-          <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
-          {children}
-        </DialogPanel>
-      </div>
+    <Dialog
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(isOpen) => !isOpen && onClose()}
+    >
+      <DialogContent
+        showCloseButton={false}
+        finalFocus={() => opener}
+        className="block"
+      >
+        <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
+        {children}
+      </DialogContent>
     </Dialog>
   );
 }
 
-const secondaryStyle = `border-input bg-card text-foreground rounded-lg hover:bg-background border font-medium transition-colors ${focusStyle}`;
-
+// The outline button with our darker input border, so it stands out on a white card.
 // `small` is the compact size used in rows and toolbars.
-const secondarySize = (small: boolean) =>
-  small ? 'px-3 py-1.5 text-sm' : 'px-4 py-2';
+const secondarySize = (small: boolean) => (small ? 'sm' : 'default');
 
 export function SecondaryButton({
-  className = '',
+  className,
   small = false,
   ...props
-}: ComponentProps<'button'> & { small?: boolean }) {
+}: ComponentProps<typeof Button> & { small?: boolean }) {
   return (
-    <button
-      className={`${secondaryStyle} ${secondarySize(small)} ${className}`}
+    <Button
+      variant="outline"
+      size={secondarySize(small)}
+      className={cn('border-input', className)}
       {...props}
     />
   );
 }
 
 export function SecondaryLink({
-  className = '',
+  className,
   small = false,
   ...props
 }: ComponentProps<typeof Link> & { small?: boolean }) {
   return (
     <Link
-      className={`${secondaryStyle} ${secondarySize(small)} ${className}`}
+      className={cn(
+        buttonVariants({ variant: 'outline', size: secondarySize(small) }),
+        'border-input',
+        className,
+      )}
       {...props}
     />
   );

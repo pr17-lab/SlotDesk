@@ -279,10 +279,26 @@ it('returns focus to the slot button when the dialog is closed', async () => {
   expect(document.activeElement).toBe(button);
 });
 
+it('closes the dialog with Escape and returns focus to the slot', async () => {
+  open({ slots: [slotAt(monday, '09:00')] });
+  const button = await screen.findByRole('button', {
+    name: 'Book 9:00 AM on Monday 5 January',
+  });
+
+  await userEvent.click(button);
+  await screen.findByRole('dialog');
+  await userEvent.keyboard('{Escape}');
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(document.activeElement).toBe(button);
+});
+
 it('shows the notices in a tinted box with role status', async () => {
   open({ slots: [slotAt(monday, '09:00')] });
 
   await fillAndBook();
+  // Base UI hides the page from queries until the dialog has closed.
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
   const confirmed = await card('Schedule').findByRole('status');
   expect(confirmed.textContent).toBe('Booking confirmed');
@@ -295,6 +311,7 @@ it('shows the notices in a tinted box with role status', async () => {
   await userEvent.click(
     within(dialog).getByRole('button', { name: 'Cancel booking' }),
   );
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
   const cancelled = await card('Bookings').findByRole('status');
   expect(cancelled.textContent).toBe('Booking cancelled');
@@ -308,6 +325,7 @@ it('marks only the new block as new', async () => {
   });
 
   await fillAndBook();
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
   const created = await card('Schedule').findByText(
     'Booked 9:00–9:30 AM, Ravi Kumar',

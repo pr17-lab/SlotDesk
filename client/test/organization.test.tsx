@@ -88,7 +88,9 @@ it('shows only the running form as busy', async () => {
   const saving = await screen.findByRole('button', { name: 'Saving…' });
   expect((saving as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getAllByRole('button', { name: 'Saving…' })).toHaveLength(1);
-  const addResource = card('Add resource').getByRole('button');
+  const addResource = card('Add resource').getByRole('button', {
+    name: 'Add resource',
+  });
   expect(addResource.textContent).toBe('Add resource');
   expect((addResource as HTMLButtonElement).disabled).toBe(false);
 
@@ -121,7 +123,9 @@ it('adds a resource with the picked zone and clears the name', async () => {
 
   await screen.findByRole('region', { name: 'Add resource' });
   await userEvent.type(card('Add resource').getByLabelText('Name'), 'Room 2');
-  await userEvent.click(card('Add resource').getByRole('button'));
+  await userEvent.click(
+    card('Add resource').getByRole('button', { name: 'Add resource' }),
+  );
 
   expect(await screen.findByText('Resource added')).toBeTruthy();
   expect(api.callsTo('POST', '/api/orgs/o1/resources')[0].body).toEqual({
@@ -205,13 +209,28 @@ it('filters the picker as you type and sends the picked zone', async () => {
   await userEvent.click(option);
 
   await userEvent.type(card('Add resource').getByLabelText('Name'), 'Room 3');
-  await userEvent.click(card('Add resource').getByRole('button'));
+  await userEvent.click(
+    card('Add resource').getByRole('button', { name: 'Add resource' }),
+  );
 
   await screen.findByText('Resource added');
   expect(api.callsTo('POST', '/api/orgs/o1/resources')[0].body).toEqual({
     name: 'Room 3',
     timeZone: 'Asia/Kolkata',
   });
+});
+
+it('shows at most 50 zones and says when none match', async () => {
+  fakeApi({ orgs: [owner] });
+  open();
+
+  const picker = await screen.findByRole('combobox', { name: 'Time zone' });
+  await userEvent.clear(picker);
+  await userEvent.type(picker, 'a');
+  expect(await screen.findAllByRole('option')).toHaveLength(50);
+
+  await userEvent.type(picker, 'zzzz');
+  expect(await screen.findByText('No matching time zone')).toBeTruthy();
 });
 
 it('marks link rows with an accent name and an arrow, and plain rows without', async () => {
