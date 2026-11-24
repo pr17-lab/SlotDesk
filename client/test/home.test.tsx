@@ -221,5 +221,5 @@ it('makes Sign out a text control, not a solid button', async () => {
   openHome();
 
   const button = await screen.findByRole('button', { name: 'Sign out' });
-  expect(button.className).not.toContain('bg-accent');
+  expect(button.className).not.toContain('bg-primary');
 });

@@ -52,7 +52,9 @@ export function Bookings({
     <Card title="Bookings">
       <FormMessage result={{ notice }} />
       {bookings.length === 0 ? (
-        <p className="text-muted mt-2">No bookings in these 7 days.</p>
+        <p className="text-muted-foreground mt-2">
+          No bookings in these 7 days.
+        </p>
       ) : (
         <ul className="divide-border mt-2 divide-y">
           {bookings.map((booking) => {
@@ -62,15 +64,17 @@ export function Bookings({
             return (
               <li
                 key={booking.id}
-                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 ${confirmed ? '' : 'text-muted'}`}
+                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 ${confirmed ? '' : 'text-muted-foreground'}`}
               >
                 <div className="min-w-0">
                   <p className="font-medium">
                     {`${dayLabel(localDate(booking.startsAt, timeZone))}, ${time.range} ${time.zone}`}
                   </p>
                   <p>{booking.customerName}</p>
-                  <p className="text-muted text-sm">{booking.customerEmail}</p>
-                  <p className="text-muted text-sm">
+                  <p className="text-muted-foreground text-sm">
+                    {booking.customerEmail}
+                  </p>
+                  <p className="text-muted-foreground text-sm">
                     {service?.name ?? 'Unknown service'}
                   </p>
                 </div>
@@ -114,7 +118,7 @@ export function Bookings({
               <button
                 type="submit"
                 disabled={cancelling}
-                className={`bg-danger text-accent-ink rounded-control px-4 py-2 font-medium disabled:opacity-60 ${focusStyle}`}
+                className={`bg-destructive text-primary-foreground rounded-lg px-4 py-2 font-medium disabled:opacity-60 ${focusStyle}`}
               >
                 {cancelling ? 'Cancelling…' : 'Cancel booking'}
               </button>

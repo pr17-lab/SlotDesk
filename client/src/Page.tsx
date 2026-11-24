@@ -17,35 +17,35 @@ export function Page({
   const loading = useNavigation().state === 'loading';
 
   return (
-    <div className="bg-background text-ink min-h-screen font-sans">
+    <div className="bg-background text-foreground min-h-screen font-sans">
       {loading && (
         <div
           role="progressbar"
           aria-label="Loading page"
           className="bg-border fixed inset-x-0 top-0 z-30 h-1 overflow-hidden"
         >
-          <div className="bg-accent motion-safe:animate-loading h-full w-2/5" />
+          <div className="bg-primary motion-safe:animate-loading h-full w-2/5" />
         </div>
       )}
-      <header className="border-border bg-surface border-b">
+      <header className="border-border bg-card border-b">
         <div
           className={`mx-auto flex ${width} items-center justify-between gap-4 px-4 py-3 sm:px-6`}
         >
           <Link
             to="/"
-            className={`rounded-control text-accent text-lg font-semibold ${focusStyle}`}
+            className={`text-primary rounded-lg text-lg font-semibold ${focusStyle}`}
           >
             SlotDesk
           </Link>
           {session && (
             <div className="flex min-w-0 items-center gap-3">
-              <span className="text-muted truncate text-sm">
+              <span className="text-muted-foreground truncate text-sm">
                 {session.user.email}
               </span>
               <Form method="post" action="/sign-out" className="shrink-0">
                 <button
                   type="submit"
-                  className={`rounded-control text-accent text-sm whitespace-nowrap underline hover:no-underline ${focusStyle}`}
+                  className={`text-primary rounded-lg text-sm whitespace-nowrap underline hover:no-underline ${focusStyle}`}
                 >
                   Sign out
                 </button>

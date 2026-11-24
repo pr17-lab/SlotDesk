@@ -54,11 +54,11 @@ export function TimeZonePicker({ hint }: { hint: string }) {
           <ComboboxInput
             displayValue={(name: string) => name}
             onChange={(event) => setQuery(event.target.value)}
-            className={`border-muted bg-surface text-ink rounded-control mt-1 block w-full border px-3 py-2 ${focusStyle}`}
+            className={`border-input bg-card text-foreground mt-1 block w-full rounded-lg border px-3 py-2 ${focusStyle}`}
           />
-          <ComboboxOptions className="bg-surface border-border rounded-control absolute z-10 mt-1 max-h-60 w-full overflow-auto border py-1 shadow-md">
+          <ComboboxOptions className="bg-card border-border absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border py-1 shadow-md">
             {matches.length === 0 && (
-              <p className="text-muted px-3 py-2 text-sm">
+              <p className="text-muted-foreground px-3 py-2 text-sm">
                 No matching time zone
               </p>
             )}
@@ -69,7 +69,7 @@ export function TimeZonePicker({ hint }: { hint: string }) {
                 className="data-focus:bg-background flex cursor-pointer items-center justify-between gap-3 px-3 py-2 data-selected:font-semibold"
               >
                 <span>{name}</span>
-                <span className="text-muted text-sm font-normal">
+                <span className="text-muted-foreground text-sm font-normal">
                   {offsetOf(name)}
                 </span>
               </ComboboxOption>
@@ -77,7 +77,9 @@ export function TimeZonePicker({ hint }: { hint: string }) {
           </ComboboxOptions>
         </div>
       </Combobox>
-      <Description className="text-muted mt-1 text-sm">{hint}</Description>
+      <Description className="text-muted-foreground mt-1 text-sm">
+        {hint}
+      </Description>
     </Field>
   );
 }

@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // The '@/…' imports in the shadcn/ui files come from tsconfig.json's paths.
+  resolve: { tsconfigPaths: true },
   server: {
     // The browser only talks to Vite, so the app and the API share one origin
     // in development too. No changeOrigin: Express must see the real Origin.

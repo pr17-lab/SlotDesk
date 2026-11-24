@@ -286,7 +286,7 @@ it('shows the notices in a tinted box with role status', async () => {
 
   const confirmed = await card('Schedule').findByRole('status');
   expect(confirmed.textContent).toBe('Booking confirmed');
-  expect(confirmed.className).toContain('bg-accent/10');
+  expect(confirmed.className).toContain('bg-primary/10');
 
   await userEvent.click(
     await screen.findByRole('button', { name: /^Cancel booking for Ravi/ }),
@@ -298,7 +298,7 @@ it('shows the notices in a tinted box with role status', async () => {
 
   const cancelled = await card('Bookings').findByRole('status');
   expect(cancelled.textContent).toBe('Booking cancelled');
-  expect(cancelled.className).toContain('bg-accent/10');
+  expect(cancelled.className).toContain('bg-primary/10');
 });
 
 it('marks only the new block as new', async () => {

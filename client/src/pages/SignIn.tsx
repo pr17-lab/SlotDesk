@@ -54,7 +54,7 @@ export function SignIn() {
           autoComplete="current-password"
         />
         {error && (
-          <p role="alert" className="text-danger">
+          <p role="alert" className="text-destructive">
             {error}
           </p>
         )}
@@ -65,7 +65,7 @@ export function SignIn() {
       <p className="mt-6">
         <Link
           to="/sign-up"
-          className={`rounded-control text-accent underline ${focusStyle}`}
+          className={`text-primary rounded-lg underline ${focusStyle}`}
         >
           Create an account
         </Link>
