@@ -8,7 +8,8 @@ import {
 import type { ActionFunctionArgs } from 'react-router';
 import { api, ApiError } from '../api';
 import { Page } from '../Page';
-import { Button, focusStyle, TextField } from '../ui';
+import { Button } from '@/components/ui/button';
+import { focusStyle, TextField } from '../ui';
 
 export async function signInAction({ request }: ActionFunctionArgs) {
   const form = await request.formData();

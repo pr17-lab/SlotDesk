@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Form, Link, useFetcher, useSubmit } from 'react-router';
+import { Button } from '@/components/ui/button';
+import { DialogClose } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from '@/components/ui/native-select';
 import type { Booking, Service, Slot } from '../api';
 import {
   addDays,
@@ -11,7 +18,6 @@ import {
   zoneAbbreviation,
 } from '../time';
 import {
-  Button,
   Card,
   FormMessage,
   Modal,
@@ -81,9 +87,9 @@ function BookDialog({
           <Button type="submit" disabled={booking}>
             {booking ? 'Booking…' : 'Book'}
           </Button>
-          <SecondaryButton type="button" onClick={onClose}>
+          <DialogClose render={<SecondaryButton type="button" />}>
             Close
-          </SecondaryButton>
+          </DialogClose>
         </div>
       </fetcher.Form>
     </Modal>
@@ -200,22 +206,20 @@ export function Schedule({
       <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
         <Form method="get">
           <input type="hidden" name="from" value={from} />
-          <label htmlFor="service" className="block text-sm font-medium">
-            Service
-          </label>
-          <select
+          <Label htmlFor="service">Service</Label>
+          <NativeSelect
             id="service"
             name="service"
             value={service.id}
             onChange={(event) => submit(event.currentTarget.form)}
-            className={`border-input bg-card text-foreground mt-1 block rounded-lg border px-3 py-2 ${focusStyle}`}
+            className="mt-1"
           >
             {services.map((item) => (
-              <option key={item.id} value={item.id}>
+              <NativeSelectOption key={item.id} value={item.id}>
                 {`${item.name} · ${item.durationMinutes} min`}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </Form>
         <div className="flex flex-wrap gap-2">
           <SecondaryLink small to={rangeLink(addDays(from, -7))}>

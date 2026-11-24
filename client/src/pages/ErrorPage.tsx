@@ -1,7 +1,8 @@
 import { Link, useRouteError } from 'react-router';
 import { ApiError } from '../api';
 import { Page } from '../Page';
-import { Button, Card, focusStyle } from '../ui';
+import { Button } from '@/components/ui/button';
+import { Card, focusStyle } from '../ui';
 import { NotFound } from './NotFound';
 
 export function ErrorPage() {

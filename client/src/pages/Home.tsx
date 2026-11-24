@@ -4,17 +4,11 @@ import {
   useLoaderData,
   type ActionFunctionArgs,
 } from 'react-router';
+import { Button } from '@/components/ui/button';
 import { api, errorToData, type Org } from '../api';
 import { Page } from '../Page';
 import { requireUser } from '../session';
-import {
-  Button,
-  Card,
-  FormMessage,
-  ListRow,
-  RoleBadge,
-  TextField,
-} from '../ui';
+import { Card, FormMessage, ListRow, RoleBadge, TextField } from '../ui';
 
 export async function homeLoader() {
   const user = await requireUser();

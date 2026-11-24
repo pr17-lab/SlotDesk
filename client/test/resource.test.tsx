@@ -39,14 +39,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it('toggles a day with the keyboard, as a switch', async () => {
+  open();
+
+  await screen.findByRole('heading', { name: 'Room 1' });
+  const saturday = screen.getByRole('switch', { name: 'Open on Saturday' });
+  saturday.focus();
+  await userEvent.keyboard(' ');
+
+  expect(saturday.getAttribute('aria-checked')).toBe('true');
+  expect(screen.getByLabelText('Saturday start')).toBeTruthy();
+});
+
 it('loads the windows into rows', async () => {
   open();
 
   await screen.findByRole('heading', { name: 'Room 1' });
-  expect(field('Open on Monday').checked).toBe(true);
+  expect(field('Open on Monday').getAttribute('aria-checked')).toBe('true');
   expect(field('Monday start').value).toBe('09:00');
   expect(field('Monday end').value).toBe('17:00');
-  expect(field('Open on Saturday').checked).toBe(false);
+  expect(field('Open on Saturday').getAttribute('aria-checked')).toBe('false');
   expect(screen.queryByLabelText('Saturday start')).toBeNull();
 });
 
@@ -118,18 +130,18 @@ it('copies Monday to Tuesday through Friday and leaves the weekend', async () =>
   });
 
   await screen.findByRole('heading', { name: 'Room 1' });
-  expect(field('Open on Tuesday').checked).toBe(false);
+  expect(field('Open on Tuesday').getAttribute('aria-checked')).toBe('false');
   await userEvent.click(
     screen.getByRole('button', { name: 'Copy Monday to weekdays' }),
   );
 
   for (const day of ['Tuesday', 'Wednesday', 'Thursday', 'Friday']) {
-    expect(field(`Open on ${day}`).checked).toBe(true);
+    expect(field(`Open on ${day}`).getAttribute('aria-checked')).toBe('true');
     expect(field(`${day} start`).value).toBe('10:00');
     expect(field(`${day} end`).value).toBe('15:00');
   }
-  expect(field('Open on Saturday').checked).toBe(false);
-  expect(field('Open on Sunday').checked).toBe(false);
+  expect(field('Open on Saturday').getAttribute('aria-checked')).toBe('false');
+  expect(field('Open on Sunday').getAttribute('aria-checked')).toBe('false');
   expect(api.callsTo('PUT', hoursPath)).toHaveLength(0);
 });
 

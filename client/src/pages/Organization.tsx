@@ -6,6 +6,7 @@ import {
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from 'react-router';
+import { Button } from '@/components/ui/button';
 import { api, ApiError, errorToData, pathParam, type Org } from '../api';
 import { Page } from '../Page';
 import { requireUser } from '../session';
@@ -13,7 +14,6 @@ import { browserTimeZone, TimeZonePicker } from '../TimeZonePicker';
 import {
   Badge,
   Breadcrumb,
-  Button,
   Card,
   FormMessage,
   ListRow,
