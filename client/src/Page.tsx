@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Form, Link, useRouteLoaderData } from 'react-router';
+import { Form, Link, useNavigation, useRouteLoaderData } from 'react-router';
 import type { Session } from './session';
-import { Button, focusStyle } from './ui';
+import { focusStyle } from './ui';
 
 export function Page({
   children,
@@ -13,9 +13,20 @@ export function Page({
   const width = wide ? 'max-w-4xl' : 'max-w-2xl';
   // Undefined when the root loader failed, null when signed out.
   const session = useRouteLoaderData<Session>('root');
+  // 'submitting' is left out: buttons already say "Saving…".
+  const loading = useNavigation().state === 'loading';
 
   return (
     <div className="bg-background text-ink min-h-screen font-sans">
+      {loading && (
+        <div
+          role="progressbar"
+          aria-label="Loading page"
+          className="bg-border fixed inset-x-0 top-0 z-30 h-1 overflow-hidden"
+        >
+          <div className="bg-accent motion-safe:animate-loading h-full w-2/5" />
+        </div>
+      )}
       <header className="border-border bg-surface border-b">
         <div
           className={`mx-auto flex ${width} items-center justify-between gap-4 px-4 py-3 sm:px-6`}
@@ -32,9 +43,12 @@ export function Page({
                 {session.user.email}
               </span>
               <Form method="post" action="/sign-out" className="shrink-0">
-                <Button type="submit" className="whitespace-nowrap">
+                <button
+                  type="submit"
+                  className={`rounded-control text-accent text-sm whitespace-nowrap underline hover:no-underline ${focusStyle}`}
+                >
                   Sign out
-                </Button>
+                </button>
               </Form>
             </div>
           )}

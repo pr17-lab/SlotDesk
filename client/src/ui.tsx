@@ -72,9 +72,22 @@ export function Card({
   );
 }
 
-export function Badge({ children }: { children: ReactNode }) {
+const badgeTones = {
+  neutral: 'border-border bg-background text-muted',
+  accent: 'border-accent/30 bg-accent/10 text-accent',
+};
+
+export function Badge({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: keyof typeof badgeTones;
+}) {
   return (
-    <span className="border-border bg-background text-muted rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap">
+    <span
+      className={`${badgeTones[tone]} rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap`}
+    >
       {children}
     </span>
   );
@@ -139,13 +152,33 @@ export function Modal({
   );
 }
 
+const secondaryStyle = `border-muted bg-surface text-ink rounded-control hover:bg-background border font-medium transition-colors ${focusStyle}`;
+
+// `small` is the compact size used in rows and toolbars.
+const secondarySize = (small: boolean) =>
+  small ? 'px-3 py-1.5 text-sm' : 'px-4 py-2';
+
 export function SecondaryButton({
   className = '',
+  small = false,
   ...props
-}: ComponentProps<'button'>) {
+}: ComponentProps<'button'> & { small?: boolean }) {
   return (
     <button
-      className={`border-muted bg-surface text-ink rounded-control border px-4 py-2 font-medium ${focusStyle} ${className}`}
+      className={`${secondaryStyle} ${secondarySize(small)} ${className}`}
+      {...props}
+    />
+  );
+}
+
+export function SecondaryLink({
+  className = '',
+  small = false,
+  ...props
+}: ComponentProps<typeof Link> & { small?: boolean }) {
+  return (
+    <Link
+      className={`${secondaryStyle} ${secondarySize(small)} ${className}`}
       {...props}
     />
   );

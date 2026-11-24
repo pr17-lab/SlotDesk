@@ -210,6 +210,7 @@ it('moves the range by seven days and keeps the service', async () => {
   );
 
   // Back to 5 January, then one more week back.
+  expect(await screen.findByText('Mon 12 Jan to Sun 18 Jan')).toBeTruthy();
   await userEvent.click(screen.getByRole('link', { name: 'Previous 7 days' }));
   await waitFor(() =>
     expect(screen.getByText('Mon 5 Jan to Sun 11 Jan')).toBeTruthy(),
@@ -440,4 +441,31 @@ it('lets staff book and cancel', async () => {
   expect(
     await screen.findByRole('button', { name: /^Cancel booking for Ravi/ }),
   ).toBeTruthy();
+});
+
+it('gives the range links, Cancel and Copy Monday the same secondary look', async () => {
+  open({ bookings: [booking()] });
+
+  await screen.findByRole('heading', { name: 'Consultation room' });
+  const previous = screen.getByRole('link', { name: 'Previous 7 days' });
+  const cancel = screen.getByRole('button', {
+    name: /^Cancel booking for Ravi/,
+  });
+  const copy = screen.getByRole('button', { name: 'Copy Monday to weekdays' });
+  for (const element of [previous, cancel, copy]) {
+    expect(element.className).toContain('border-muted');
+  }
+});
+
+it('tells Confirmed and Cancelled apart by tone', async () => {
+  open({
+    bookings: [
+      booking(),
+      booking({ id: 'b2', customerName: 'Meera', status: 'cancelled' }),
+    ],
+  });
+
+  const confirmed = await screen.findByText('Confirmed');
+  expect(confirmed.className).toContain('text-accent');
+  expect(screen.getByText('Cancelled').className).not.toContain('text-accent');
 });
