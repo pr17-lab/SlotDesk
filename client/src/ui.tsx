@@ -10,7 +10,7 @@ import type { Org } from './api';
 
 // One focus look for every link, button and field.
 export const focusStyle =
-  'focus-visible:outline-accent focus-visible:outline-2 focus-visible:outline-offset-2';
+  'focus-visible:outline-primary focus-visible:outline-2 focus-visible:outline-offset-2';
 
 type TextFieldProps = ComponentProps<'input'> & {
   label: string;
@@ -29,11 +29,11 @@ export function TextField({ label, hint, ...inputProps }: TextFieldProps) {
       <input
         id={id}
         aria-describedby={hint ? hintId : undefined}
-        className={`border-muted bg-surface text-ink rounded-control mt-1 block w-full border px-3 py-2 ${focusStyle}`}
+        className={`border-input bg-card text-foreground mt-1 block w-full rounded-lg border px-3 py-2 ${focusStyle}`}
         {...inputProps}
       />
       {hint && (
-        <p id={hintId} className="text-muted mt-1 text-sm">
+        <p id={hintId} className="text-muted-foreground mt-1 text-sm">
           {hint}
         </p>
       )}
@@ -44,7 +44,7 @@ export function TextField({ label, hint, ...inputProps }: TextFieldProps) {
 export function Button({ className = '', ...props }: ComponentProps<'button'>) {
   return (
     <button
-      className={`bg-accent text-accent-ink rounded-control px-4 py-2 font-medium disabled:opacity-60 ${focusStyle} ${className}`}
+      className={`bg-primary text-primary-foreground rounded-lg px-4 py-2 font-medium disabled:opacity-60 ${focusStyle} ${className}`}
       {...props}
     />
   );
@@ -62,7 +62,7 @@ export function Card({
   return (
     <section
       aria-labelledby={id}
-      className="bg-surface border-border rounded-control border p-5 shadow-sm"
+      className="bg-card border-border rounded-lg border p-5 shadow-sm"
     >
       <h2 id={id} className="text-lg font-semibold">
         {title}
@@ -73,8 +73,8 @@ export function Card({
 }
 
 const badgeTones = {
-  neutral: 'border-border bg-background text-muted',
-  accent: 'border-accent/30 bg-accent/10 text-accent',
+  neutral: 'border-border bg-background text-muted-foreground',
+  accent: 'border-primary/30 bg-primary/10 text-primary',
 };
 
 export function Badge({
@@ -109,18 +109,18 @@ export function ListRow({
   detail: ReactNode;
 }) {
   return (
-    <li className="hover:bg-background rounded-control relative -mx-2 flex items-center justify-between gap-3 px-2 py-3 transition-colors">
+    <li className="hover:bg-background relative -mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors">
       {to ? (
         <Link
           to={to}
-          className={`rounded-control text-accent font-medium after:absolute after:inset-0 hover:underline ${focusStyle}`}
+          className={`text-primary rounded-lg font-medium after:absolute after:inset-0 hover:underline ${focusStyle}`}
         >
           {name}
         </Link>
       ) : (
         <span className="font-medium">{name}</span>
       )}
-      <span className="text-muted flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground flex items-center gap-2 text-sm">
         {detail}
         {to && <span aria-hidden="true">›</span>}
       </span>
@@ -141,9 +141,9 @@ export function Modal({
 }) {
   return (
     <Dialog open onClose={onClose} className="relative z-20">
-      <DialogBackdrop className="bg-ink/40 fixed inset-0" />
+      <DialogBackdrop className="bg-foreground/40 fixed inset-0" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="bg-surface border-border rounded-control w-full max-w-md border p-5 shadow-lg">
+        <DialogPanel className="bg-card border-border w-full max-w-md rounded-lg border p-5 shadow-lg">
           <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
           {children}
         </DialogPanel>
@@ -152,7 +152,7 @@ export function Modal({
   );
 }
 
-const secondaryStyle = `border-muted bg-surface text-ink rounded-control hover:bg-background border font-medium transition-colors ${focusStyle}`;
+const secondaryStyle = `border-input bg-card text-foreground rounded-lg hover:bg-background border font-medium transition-colors ${focusStyle}`;
 
 // `small` is the compact size used in rows and toolbars.
 const secondarySize = (small: boolean) =>
@@ -190,7 +190,7 @@ export function Breadcrumb({
   items: { label: string; to?: string }[];
 }) {
   return (
-    <nav aria-label="Breadcrumb" className="text-muted text-sm">
+    <nav aria-label="Breadcrumb" className="text-muted-foreground text-sm">
       <ol className="flex flex-wrap items-center gap-x-2">
         {items.map((item, index) => (
           <li key={item.label} className="flex items-center gap-x-2">
@@ -198,7 +198,7 @@ export function Breadcrumb({
             {item.to ? (
               <Link
                 to={item.to}
-                className={`rounded-control hover:underline ${focusStyle}`}
+                className={`rounded-lg hover:underline ${focusStyle}`}
               >
                 {item.label}
               </Link>
@@ -220,7 +220,7 @@ export function FormMessage({
 }) {
   if (result?.error) {
     return (
-      <p role="alert" className="text-danger text-sm">
+      <p role="alert" className="text-destructive text-sm">
         {result.error}
       </p>
     );
@@ -229,7 +229,7 @@ export function FormMessage({
     return (
       <p
         role="status"
-        className="bg-accent/10 text-accent rounded-control motion-safe:animate-fade-in mt-3 px-3 py-2 text-sm font-medium"
+        className="bg-primary/10 text-primary motion-safe:animate-fade-in mt-3 rounded-lg px-3 py-2 text-sm font-medium"
       >
         {result.notice}
       </p>

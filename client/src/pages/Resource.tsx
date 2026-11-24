@@ -248,7 +248,7 @@ function TimeSelect({
   return (
     <select
       value={value}
-      className={`border-muted bg-surface text-ink rounded-control border px-2 py-1 ${focusStyle}`}
+      className={`border-input bg-card text-foreground rounded-lg border px-2 py-1 ${focusStyle}`}
       {...props}
     >
       {options}
@@ -309,16 +309,19 @@ function HoursEditor({
                   />
                   <span
                     aria-hidden="true"
-                    className="bg-muted peer-checked:bg-accent peer-focus-visible:outline-accent after:bg-surface relative h-6 w-11 rounded-full transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:transition-transform peer-checked:after:translate-x-5"
+                    className="bg-input peer-checked:bg-primary peer-focus-visible:outline-primary after:bg-card relative h-6 w-11 rounded-full transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:transition-transform peer-checked:after:translate-x-5"
                   />
-                  <span className="text-muted w-14 text-sm">
+                  <span className="text-muted-foreground w-14 text-sm">
                     {row.open ? 'Open' : 'Closed'}
                   </span>
                 </label>
                 {row.open && (
                   <>
                     <div className="flex items-center gap-2">
-                      <span aria-hidden="true" className="text-muted text-sm">
+                      <span
+                        aria-hidden="true"
+                        className="text-muted-foreground text-sm"
+                      >
                         Start
                       </span>
                       <TimeSelect
@@ -332,7 +335,10 @@ function HoursEditor({
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span aria-hidden="true" className="text-muted text-sm">
+                      <span
+                        aria-hidden="true"
+                        className="text-muted-foreground text-sm"
+                      >
                         End
                       </span>
                       <TimeSelect
@@ -348,7 +354,10 @@ function HoursEditor({
                   </>
                 )}
                 {badDays.includes(weekday) && (
-                  <p role="alert" className="text-danger basis-full text-sm">
+                  <p
+                    role="alert"
+                    className="text-destructive basis-full text-sm"
+                  >
                     End must be after start
                   </p>
                 )}
@@ -366,7 +375,7 @@ function HoursEditor({
         </div>
         <FormMessage result={fetcher.data} />
       </fetcher.Form>
-      <p className="text-muted mt-4 text-sm">
+      <p className="text-muted-foreground mt-4 text-sm">
         {`Times are in ${timeZone}. A day can't stay open until midnight; the latest end is 11:59 PM.`}
       </p>
     </>
@@ -410,7 +419,7 @@ export function Resource() {
         ]}
       />
       <h1 className="mt-2 text-2xl font-semibold">{resource.name}</h1>
-      <p className="text-muted">{resource.timeZone}</p>
+      <p className="text-muted-foreground">{resource.timeZone}</p>
 
       <div className="mt-8 space-y-6">
         <Schedule
@@ -440,7 +449,7 @@ export function Resource() {
             <>
               <ReadOnlyWeek windows={windows} />
               {isOwner && (
-                <p className="border-border bg-background rounded-control mt-4 border p-3 text-sm">
+                <p className="border-border bg-background mt-4 rounded-lg border p-3 text-sm">
                   These hours can only be edited through the API (split days or
                   open until midnight)
                 </p>

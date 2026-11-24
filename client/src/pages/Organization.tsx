@@ -111,7 +111,7 @@ function SampleDataCard() {
 
   return (
     <Card title="Get started">
-      <p className="text-muted mt-2">
+      <p className="text-muted-foreground mt-2">
         Start with a sample room, a 30-minute service and weekday hours.
       </p>
       <fetcher.Form method="post" className="mt-4 space-y-4">
@@ -201,7 +201,7 @@ export function Organization() {
         <div className="space-y-6">
           <Card title="Resources">
             {resources.length === 0 ? (
-              <p className="text-muted mt-2">No resources yet.</p>
+              <p className="text-muted-foreground mt-2">No resources yet.</p>
             ) : (
               <ul className="divide-border mt-2 divide-y">
                 {resources.map((resource) => (
@@ -221,7 +221,7 @@ export function Organization() {
         <div className="space-y-6">
           <Card title="Services">
             {services.length === 0 ? (
-              <p className="text-muted mt-2">No services yet.</p>
+              <p className="text-muted-foreground mt-2">No services yet.</p>
             ) : (
               <ul className="divide-border mt-2 divide-y">
                 {services.map((service) => (

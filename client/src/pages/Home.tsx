@@ -42,12 +42,12 @@ export function Home() {
   return (
     <Page>
       <h1 className="text-2xl font-semibold">Your organizations</h1>
-      <p className="text-muted mt-1">{`Signed in as ${user.email}.`}</p>
+      <p className="text-muted-foreground mt-1">{`Signed in as ${user.email}.`}</p>
 
       <div className="mt-8 space-y-6">
         <Card title="Organizations">
           {orgs.length === 0 ? (
-            <p className="text-muted mt-2">
+            <p className="text-muted-foreground mt-2">
               Welcome. Create your first organization to begin.
             </p>
           ) : (

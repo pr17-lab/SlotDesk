@@ -55,7 +55,7 @@ function BookDialog({
       title={`Book ${localTime(slot.startsAt, timeZone)}, ${dayLabel(date, true)}`}
       onClose={onClose}
     >
-      <p className="text-muted mt-1 text-sm">
+      <p className="text-muted-foreground mt-1 text-sm">
         {`${service.name} · ${service.durationMinutes} min`}
       </p>
       <fetcher.Form method="post" className="mt-4 space-y-4">
@@ -140,7 +140,7 @@ export function Schedule({
         </p>
         <Link
           to={`/orgs/${orgId}`}
-          className={`rounded-control text-accent mt-2 inline-block font-medium hover:underline ${focusStyle}`}
+          className={`text-primary mt-2 inline-block rounded-lg font-medium hover:underline ${focusStyle}`}
         >
           Go to the organization page
         </Link>
@@ -208,7 +208,7 @@ export function Schedule({
             name="service"
             value={service.id}
             onChange={(event) => submit(event.currentTarget.form)}
-            className={`border-muted bg-surface text-ink rounded-control mt-1 block border px-3 py-2 ${focusStyle}`}
+            className={`border-input bg-card text-foreground mt-1 block rounded-lg border px-3 py-2 ${focusStyle}`}
           >
             {services.map((item) => (
               <option key={item.id} value={item.id}>
@@ -232,7 +232,7 @@ export function Schedule({
       <p className="mt-3 font-medium">
         {`${dayLabel(from)} to ${dayLabel(to)}`}
       </p>
-      <p className="text-muted text-sm">
+      <p className="text-muted-foreground text-sm">
         {`All times are in ${timeZone} (${zoneAbbreviation(new Date(), timeZone)}).`}
       </p>
       <FormMessage result={{ notice }} />
@@ -246,7 +246,7 @@ export function Schedule({
             aria-hidden="true"
             data-time-label
             style={cell(1, rowOf(row))}
-            className="text-muted hidden pt-2 text-xs whitespace-nowrap md:[grid-column:var(--col)] md:[grid-row:var(--row)] md:block"
+            className="text-muted-foreground hidden pt-2 text-xs whitespace-nowrap md:[grid-column:var(--col)] md:[grid-row:var(--row)] md:block"
           >
             {localTime(row.startsAt, timeZone)}
           </li>
@@ -254,15 +254,15 @@ export function Schedule({
         {days.map((day, dayIndex) => (
           <li
             key={day}
-            className="border-border rounded-control mb-3 border md:contents"
+            className="border-border mb-3 rounded-lg border md:contents"
           >
             <h3
               style={cell(dayIndex + 2, 1)}
-              className="bg-surface border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-2 text-sm font-semibold md:sticky md:top-0 md:z-10 md:[grid-column:var(--col)] md:[grid-row:var(--row)]"
+              className="bg-card border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-2 text-sm font-semibold md:sticky md:top-0 md:z-10 md:[grid-column:var(--col)] md:[grid-row:var(--row)]"
             >
               {dayLabel(day)}
               {day === today && (
-                <span className="bg-accent text-accent-ink rounded-full px-2 py-0.5 text-xs font-medium">
+                <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs font-medium">
                   Today
                 </span>
               )}
@@ -271,7 +271,7 @@ export function Schedule({
               <p
                 data-day={day}
                 style={cell(dayIndex + 2, 2, Math.max(rows.length, 1))}
-                className={`text-muted p-2 text-sm ${placed}`}
+                className={`text-muted-foreground p-2 text-sm ${placed}`}
               >
                 No free times
               </p>
@@ -289,7 +289,7 @@ export function Schedule({
                       data-day={day}
                       data-new={item.booking.id === newBookingId || undefined}
                       style={cell(dayIndex + 2, rowOf(item), spanOf(item))}
-                      className={`bg-accent/10 border-accent text-ink rounded-control border-l-4 px-1 py-1 text-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
+                      className={`bg-primary/10 border-primary text-foreground rounded-lg border-l-4 px-1 py-1 text-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
                     >
                       <span aria-hidden="true">
                         <span className="block text-[11px] font-medium whitespace-nowrap">
@@ -317,7 +317,7 @@ export function Schedule({
                           setChosen(item);
                           setAttempt(attempt + 1);
                         }}
-                        className={`border-accent text-accent bg-surface rounded-control hover:ring-accent focus-visible:ring-accent w-full border px-2 py-1 text-sm font-medium hover:ring-2 focus-visible:ring-2 ${focusStyle}`}
+                        className={`border-primary text-primary bg-card hover:ring-primary focus-visible:ring-primary w-full rounded-lg border px-2 py-1 text-sm font-medium hover:ring-2 focus-visible:ring-2 ${focusStyle}`}
                       >
                         {localTime(item.startsAt, timeZone)}
                       </button>

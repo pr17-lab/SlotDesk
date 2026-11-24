@@ -453,7 +453,7 @@ it('gives the range links, Cancel and Copy Monday the same secondary look', asyn
   });
   const copy = screen.getByRole('button', { name: 'Copy Monday to weekdays' });
   for (const element of [previous, cancel, copy]) {
-    expect(element.className).toContain('border-muted');
+    expect(element.className).toContain('border-input');
   }
 });
 
@@ -466,6 +466,6 @@ it('tells Confirmed and Cancelled apart by tone', async () => {
   });
 
   const confirmed = await screen.findByText('Confirmed');
-  expect(confirmed.className).toContain('text-accent');
-  expect(screen.getByText('Cancelled').className).not.toContain('text-accent');
+  expect(confirmed.className).toContain('text-primary');
+  expect(screen.getByText('Cancelled').className).not.toContain('text-primary');
 });

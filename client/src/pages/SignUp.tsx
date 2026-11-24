@@ -63,7 +63,7 @@ export function SignUp() {
           hint="At least 15 characters"
         />
         {error && (
-          <p role="alert" className="text-danger">
+          <p role="alert" className="text-destructive">
             {error}
           </p>
         )}
@@ -74,7 +74,7 @@ export function SignUp() {
       <p className="mt-6">
         <Link
           to="/sign-in"
-          className={`rounded-control text-accent underline ${focusStyle}`}
+          className={`text-primary rounded-lg underline ${focusStyle}`}
         >
           Sign in instead
         </Link>

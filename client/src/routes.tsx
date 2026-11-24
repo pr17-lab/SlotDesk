@@ -25,14 +25,14 @@ export const routes: RouteObject[] = [
       <Page>
         <Card title="Starting SlotDesk">
           <div role="status">
-            <p className="text-muted mt-2">
+            <p className="text-muted-foreground mt-2">
               The server may take up to 30 seconds to wake up on the first
               visit.
             </p>
             <div className="mt-4 space-y-3 motion-safe:animate-pulse">
-              <div className="bg-border rounded-control h-4 w-3/4" />
-              <div className="bg-border rounded-control h-4 w-full" />
-              <div className="bg-border rounded-control h-4 w-1/2" />
+              <div className="bg-border h-4 w-3/4 rounded-lg" />
+              <div className="bg-border h-4 w-full rounded-lg" />
+              <div className="bg-border h-4 w-1/2 rounded-lg" />
             </div>
           </div>
         </Card>
