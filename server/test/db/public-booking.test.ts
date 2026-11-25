@@ -1,8 +1,9 @@
 // The public booking routes under /api/public, through the real app on the
 // test database, with no session. Covers the business page, free times with
 // the 30-day horizon, booking (201, 400, 409, 403), the identical 404 for an
-// unknown, turned-off or malformed link, and isolation: one business's link
-// never reaches another business's rooms or services.
+// unknown, turned-off or malformed link, isolation (one business's link never
+// reaches another business's rooms or services) and the bot check, which runs
+// before the booking's transaction and never inside it.
 import pg from 'pg';
 import request from 'supertest';
 import {
@@ -26,6 +27,12 @@ import {
   requireTestDatabase,
   truncateTables,
 } from './helpers/db-guard.js';
+import {
+  fakeSiteverify,
+  siteverifyPasses,
+  TEST_TOKEN,
+  verifyCalls,
+} from './helpers/turnstile-fake.js';
 import { logger } from '../../src/logger.js';
 
 const TRUSTED_ORIGIN = 'http://localhost:3000';
@@ -130,11 +137,12 @@ const validBody = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-const book = (slug: string, body: unknown, origin = TRUSTED_ORIGIN) =>
+// Sends a bot check token unless the body sets its own.
+const book = (slug: string, body: object, origin = TRUSTED_ORIGIN) =>
   request(app)
     .post(`/api/public/${slug}/bookings`)
     .set('Origin', origin)
-    .send(body as object);
+    .send({ turnstileToken: TEST_TOKEN, ...body });
 
 const freeTimes = (slug: string, resourceId: string, query: object) =>
   request(app)
@@ -159,6 +167,7 @@ const unknownRoute = async () =>
   observed(await request(app).get('/api/no-such-route'));
 
 beforeAll(async () => {
+  siteverifyPasses();
   client = createClient();
   await connectAndVerify(client);
   alice = await createUser(app, client, {
@@ -204,6 +213,7 @@ describe('GET /api/public/:slug', () => {
         { id: roomA2, name: 'Room two', timeZone: 'UTC' },
       ],
       services: [{ id: serviceA, name: 'Half hour', durationMinutes: 30 }],
+      turnstileSiteKey: '1x00000000000000000000AA',
     });
   });
 
@@ -549,5 +559,135 @@ describe("isolation: one business's link never reaches another's", () => {
     expect(res.status).toBe(201);
     const row = await client.query('SELECT org_id FROM bookings');
     expect(row.rows).toEqual([{ org_id: orgB }]);
+  });
+});
+
+describe('the bot check', () => {
+  // Each test sets its own Cloudflare answer; the rest of the file expects
+  // every check to pass.
+  afterEach(() => {
+    siteverifyPasses();
+  });
+
+  const failsWith = (code: string) =>
+    fakeSiteverify(async () =>
+      Response.json({ success: false, 'error-codes': [code] }),
+    );
+
+  it("sends the page's token and our secret before booking", async () => {
+    const fake = siteverifyPasses();
+    const res = await book(
+      'sunrise-physio',
+      validBody({ turnstileToken: 'token-from-the-page' }),
+    );
+    expect(res.status).toBe(201);
+    expect(verifyCalls(fake)).toBe(1);
+    const sent = fake.mock.calls[0]![1]!.body as URLSearchParams;
+    expect(sent.get('response')).toBe('token-from-the-page');
+    // The always-pass test secret set in vitest.db.config.ts.
+    expect(sent.get('secret')).toBe('1x0000000000000000000000000000000AA');
+  });
+
+  it('refuses a failed check with 400 and writes nothing', async () => {
+    failsWith('invalid-input-response');
+    const res = await book('sunrise-physio', validBody());
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: 'Bad Request',
+      details: [
+        { path: 'turnstileToken', message: 'Please complete the check again' },
+      ],
+    });
+    expect(await countBookings()).toBe(0);
+  });
+
+  it.each([
+    ['Cloudflare has an internal error', () => failsWith('internal-error')],
+    [
+      'Cloudflare cannot be reached',
+      () =>
+        fakeSiteverify(async () => {
+          throw new TypeError('fetch failed');
+        }),
+    ],
+  ])('answers 503 when %s, and writes nothing', async (_label, fake) => {
+    fake();
+    const res = await book('sunrise-physio', validBody());
+    expect(res.status).toBe(503);
+    expect(res.headers['retry-after']).toBe('30');
+    expect(res.body).toEqual({ error: 'Service Unavailable' });
+    expect(await countBookings()).toBe(0);
+  });
+
+  it.each([
+    ['a missing token', undefined],
+    ['an empty token', ''],
+    ['a token over 2048 characters', 'x'.repeat(2049)],
+  ])('refuses %s with 400 before asking Cloudflare', async (_label, token) => {
+    const fake = siteverifyPasses();
+    const res = await book(
+      'sunrise-physio',
+      validBody({ turnstileToken: token }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.details[0].path).toBe('turnstileToken');
+    expect(verifyCalls(fake)).toBe(0);
+    expect(await countBookings()).toBe(0);
+  });
+
+  it('accepts a token of exactly 2048 characters', async () => {
+    const res = await book(
+      'sunrise-physio',
+      validBody({ turnstileToken: 'x'.repeat(2048) }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it('spends no check on a bad body or an unknown link', async () => {
+    const fake = siteverifyPasses();
+    const bad = await book(
+      'sunrise-physio',
+      validBody({ customerEmail: 'not-an-email' }),
+    );
+    expect(bad.status).toBe(400);
+    const unknown = await book('no-such-business', validBody());
+    expect(unknown.status).toBe(404);
+    expect(verifyCalls(fake)).toBe(0);
+  });
+
+  // createBooking locks the room's row. If the check ever ran inside that
+  // transaction, one slow Cloudflare answer would hold up every booking for
+  // the room, staff ones too.
+  it('does not hold up a staff booking on the same room while Cloudflare is slow', async () => {
+    let asked!: () => void;
+    const askedCloudflare = new Promise<void>((resolve) => (asked = resolve));
+    let answer!: () => void;
+    const cloudflareAnswers = new Promise<void>(
+      (resolve) => (answer = resolve),
+    );
+    fakeSiteverify(async () => {
+      asked();
+      await cloudflareAnswers;
+      return Response.json({ success: true });
+    });
+
+    const online = book('sunrise-physio', validBody()).then((res) => res);
+    try {
+      await askedCloudflare;
+      const staff = asOwner(
+        alice.cookie,
+        'post',
+        `/api/orgs/${orgA}/bookings`,
+        validBody({ startsAt: at10(3) }),
+      ).then((res) => res.status);
+      const tooSlow = new Promise<'still waiting'>((resolve) =>
+        setTimeout(() => resolve('still waiting'), 3000),
+      );
+      expect(await Promise.race([staff, tooSlow])).toBe(201);
+    } finally {
+      answer();
+    }
+    expect((await online).status).toBe(201);
+    expect(await countBookings()).toBe(2);
   });
 });

@@ -9,6 +9,7 @@ import { listServices } from '../data/services.js';
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
+import { verifyTurnstile } from '../turnstile.js';
 import { availabilityQuerySchema, findFreeTimes } from './availability.js';
 import { createBookingSchema, sendNotOffered } from './bookings.js';
 
@@ -33,6 +34,12 @@ export const bookingSlugSchema = z
     message:
       'Use 3 to 40 letters, digits or hyphens, starting and ending with a letter or digit',
   });
+
+// The staff booking fields plus the bot check's token. Cloudflare's tokens
+// are at most 2048 characters.
+const publicBookingSchema = createBookingSchema.extend({
+  turnstileToken: z.string().min(1).max(2048),
+});
 
 declare global {
   // Express declares Locals in a global namespace, so adding to it needs one.
@@ -87,7 +94,13 @@ businessRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
     listResources(org.id),
     listServices(org.id),
   ]);
-  res.status(200).json({ name: org.name, resources, services });
+  res.status(200).json({
+    name: org.name,
+    resources,
+    services,
+    // The page draws the bot check with it; null means online booking is off.
+    turnstileSiteKey: config.turnstile?.siteKey ?? null,
+  });
 });
 
 // Free times only, never a booking, and none past the horizon.
@@ -128,21 +141,50 @@ businessRouter.get(
 // Books through the same createBooking as staff, with the online rules on.
 // The answer is what the confirmation shows: no booking ID and no customer
 // details.
+//
+// The bot check runs here, before createBooking and outside its
+// transaction. Never move it inside: createBooking locks the room's row, so
+// every booking for that room, staff ones too, would wait on Cloudflare.
 businessRouter.post(
   '/bookings',
   async (req: Request, res: Response): Promise<void> => {
-    const parsed = createBookingSchema.safeParse(req.body);
+    if (config.turnstile === null) {
+      res.status(503).json({ error: 'Online booking is not set up' });
+      return;
+    }
+    // Checked first, so a bad body never spends a bot check.
+    const parsed = publicBookingSchema.safeParse(req.body);
     if (!parsed.success) {
       sendValidationError(res, parsed.error);
       return;
     }
-    const now = new Date();
-    const result = await createBooking(
-      res.locals.publicOrg.id,
-      parsed.data,
-      now,
-      { latestStart: latestStart(now), dailyCap: config.publicDailyBookingCap },
+    const { turnstileToken, ...booking } = parsed.data;
+    const check = await verifyTurnstile(
+      config.turnstile.secretKey,
+      turnstileToken,
     );
+    if (check === 'rejected') {
+      res.status(400).json({
+        error: 'Bad Request',
+        details: [
+          {
+            path: 'turnstileToken',
+            message: 'Please complete the check again',
+          },
+        ],
+      });
+      return;
+    }
+    if (check === 'unavailable') {
+      res.set('Retry-After', '30');
+      res.status(503).json({ error: 'Service Unavailable' });
+      return;
+    }
+    const now = new Date();
+    const result = await createBooking(res.locals.publicOrg.id, booking, now, {
+      latestStart: latestStart(now),
+      dailyCap: config.publicDailyBookingCap,
+    });
     if (result.status === 'notFound') {
       notFoundHandler(req, res);
       return;

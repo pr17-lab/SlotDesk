@@ -26,6 +26,10 @@ export default defineConfig({
       // cap tests rely on it.
       PUBLIC_REQUEST_RATE_LIMIT: '100000',
       PUBLIC_BOOKING_RATE_LIMIT: '100000',
+      // Cloudflare's published test keys (always pass). Tests never reach
+      // Cloudflare: they fake siteverify (helpers/turnstile-fake.ts).
+      TURNSTILE_SITE_KEY: '1x00000000000000000000AA',
+      TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
     },
   },
 });
