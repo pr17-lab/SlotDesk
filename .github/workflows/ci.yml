@@ -129,6 +129,79 @@ jobs:
 
       - run: npm run build
 
+  # The built client, served by the built server, against a real database,
+  # in a real browser.
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: e2e
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          # Throwaway container credentials — not a secret.
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: slotdesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d slotdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk
+      BETTER_AUTH_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: server/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+            e2e/package-lock.json
+
+      - name: Build the client
+        working-directory: client
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build the server and apply migrations
+        working-directory: server
+        run: |
+          npm ci
+          npm run build
+          npm run migrate:up
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Smoke test
+        # A fresh secret for each run, so none is stored in the repository.
+        run: |
+          BETTER_AUTH_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))") npm test
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ failure() }}
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
   audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -163,4 +236,9 @@ jobs:
       - name: Audit all client dependencies (high or critical)
         if: ${{ !cancelled() }}
         working-directory: client
+        run: npm audit --audit-level=high
+
+      - name: Audit all smoke test dependencies (high or critical)
+        if: ${{ !cancelled() }}
+        working-directory: e2e
         run: npm audit --audit-level=high
