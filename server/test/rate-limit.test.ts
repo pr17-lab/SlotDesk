@@ -179,3 +179,86 @@ describe('the limits on /api/orgs in the real app', () => {
     }
   });
 });
+
+describe('the limits on /api/public in the real app', () => {
+  const loadApp = async (env: Record<string, string> = {}) => {
+    for (const [name, value] of Object.entries(env)) {
+      vi.stubEnv(name, value);
+    }
+    vi.resetModules();
+    const { app } = await import('../src/app.js');
+    return app;
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // No Origin header, so a booking that gets past the limiter is refused
+  // with 403 by the origin check, before any database query.
+  const bookFrom = (app: express.Express, address: string) =>
+    request(app)
+      .post('/api/public/some-clinic/bookings')
+      .set('cf-connecting-ip', address);
+
+  // A malformed link is refused with 404 before any database query.
+  const readFrom = (app: express.Express, address: string) =>
+    request(app).get('/api/public/x').set('cf-connecting-ip', address);
+
+  it('allows 5 online bookings an hour from one address by default', async () => {
+    const app = await loadApp();
+
+    for (let i = 0; i < 5; i++) {
+      expect((await bookFrom(app, '1.1.1.1')).status).toBe(403);
+    }
+    const res = await bookFrom(app, '1.1.1.1');
+
+    expect(res.status).toBe(429);
+    expect(res.body).toEqual({ error: 'Too Many Requests' });
+    // An hour's window, not the 15 minutes the other limits use.
+    const retryAfter = Number(res.headers['retry-after']);
+    expect(retryAfter).toBeGreaterThan(15 * 60);
+    expect(retryAfter).toBeLessThanOrEqual(60 * 60);
+    expect((await bookFrom(app, '2.2.2.2')).status).toBe(403);
+  });
+
+  it('does not count reads against the booking limit', async () => {
+    const app = await loadApp({ PUBLIC_BOOKING_RATE_LIMIT: '1' });
+
+    for (let i = 0; i < 5; i++) {
+      expect((await readFrom(app, '1.1.1.1')).status).toBe(404);
+    }
+
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(403);
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(429);
+  });
+
+  it('limits every public request, reads included', async () => {
+    const app = await loadApp({ PUBLIC_REQUEST_RATE_LIMIT: '2' });
+
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(404);
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(403);
+
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(429);
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(429);
+  });
+
+  it('keeps its counts apart from the /api/orgs counts', async () => {
+    const app = await loadApp({
+      PUBLIC_REQUEST_RATE_LIMIT: '1',
+      REQUEST_RATE_LIMIT: '1',
+    });
+
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(404);
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(429);
+    // The public count is used up; the staff one is not.
+    const orgs = await request(app)
+      .post('/api/orgs')
+      .set('cf-connecting-ip', '1.1.1.1');
+    expect(orgs.status).toBe(403);
+    const orgsAgain = await request(app)
+      .post('/api/orgs')
+      .set('cf-connecting-ip', '1.1.1.1');
+    expect(orgsAgain.status).toBe(429);
+  });
+});

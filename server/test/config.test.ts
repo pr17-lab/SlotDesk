@@ -202,3 +202,42 @@ describe('envSchema (rate limit settings)', () => {
     },
   );
 });
+
+describe('envSchema (online booking settings)', () => {
+  const baseEnv = {
+    DATABASE_URL: 'postgresql://test:test@db.invalid:5432/slotdesk_test',
+    BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+  };
+
+  it('uses 300 requests, 5 bookings an hour and 20 a day when not set', () => {
+    const result = envSchema.parse(baseEnv);
+    expect(result.PUBLIC_REQUEST_RATE_LIMIT).toBe(300);
+    expect(result.PUBLIC_BOOKING_RATE_LIMIT).toBe(5);
+    expect(result.PUBLIC_DAILY_BOOKING_CAP).toBe(20);
+  });
+
+  it('reads all three as numbers', () => {
+    const result = envSchema.parse({
+      ...baseEnv,
+      PUBLIC_REQUEST_RATE_LIMIT: '30',
+      PUBLIC_BOOKING_RATE_LIMIT: '2',
+      PUBLIC_DAILY_BOOKING_CAP: '50',
+    });
+    expect(result.PUBLIC_REQUEST_RATE_LIMIT).toBe(30);
+    expect(result.PUBLIC_BOOKING_RATE_LIMIT).toBe(2);
+    expect(result.PUBLIC_DAILY_BOOKING_CAP).toBe(50);
+  });
+
+  it.each([
+    'PUBLIC_REQUEST_RATE_LIMIT',
+    'PUBLIC_BOOKING_RATE_LIMIT',
+    'PUBLIC_DAILY_BOOKING_CAP',
+  ])('rejects 0 for %s and names it', (name) => {
+    const result = envSchema.safeParse({ ...baseEnv, [name]: '0' });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toMatch(name);
+    }
+  });
+});

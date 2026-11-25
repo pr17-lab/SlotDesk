@@ -256,6 +256,7 @@ describe('create, list and view', () => {
       id: orgId,
       name: 'Alice View Org',
       role: 'owner',
+      bookingSlug: null,
     });
   });
 
@@ -282,6 +283,7 @@ describe('create, list and view', () => {
       id: orgId,
       name: 'Alice Staffed Org',
       role: 'staff',
+      bookingSlug: null,
     });
   });
 });
