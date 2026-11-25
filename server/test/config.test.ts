@@ -125,6 +125,13 @@ describe('authUrlSchema (BETTER_AUTH_URL validation)', () => {
   });
 });
 
+// Shaped like real keys, but made up. Production refuses Cloudflare's
+// published test keys, so production tests need these.
+const REAL_LOOKING_TURNSTILE_KEYS = {
+  TURNSTILE_SITE_KEY: '0x4AAAAAAAmadeUpSiteKey',
+  TURNSTILE_SECRET_KEY: '0x4AAAAAAAmadeUpSecretKeyNotReal00',
+};
+
 describe('envSchema (BETTER_AUTH_URL must be https in production)', () => {
   // Test-only values; none of them is a real secret or database.
   const baseEnv = {
@@ -158,6 +165,7 @@ describe('envSchema (BETTER_AUTH_URL must be https in production)', () => {
   ])('accepts $name', ({ nodeEnv, url }) => {
     const result = envSchema.safeParse({
       ...baseEnv,
+      ...REAL_LOOKING_TURNSTILE_KEYS,
       NODE_ENV: nodeEnv,
       BETTER_AUTH_URL: url,
     });
@@ -239,5 +247,87 @@ describe('envSchema (online booking settings)', () => {
     if (!result.success) {
       expect(result.error.issues[0].message).toMatch(name);
     }
+  });
+});
+
+describe('envSchema (bot check keys)', () => {
+  const baseEnv = {
+    DATABASE_URL: 'postgresql://test:test@db.invalid:5432/slotdesk_test',
+    BETTER_AUTH_SECRET: 'test-only-secret-not-for-real-00',
+    BETTER_AUTH_URL: 'https://slotdesk.example.com',
+  };
+  // Cloudflare's published test keys (always pass, always fail, spent).
+  const TEST_SITE_KEY = '1x00000000000000000000AA';
+  const TEST_SECRETS = [
+    '1x0000000000000000000000000000000AA',
+    '2x0000000000000000000000000000000AA',
+    '3x0000000000000000000000000000000AA',
+  ];
+
+  const messages = (env: Record<string, string>): string[] => {
+    const result = envSchema.safeParse({ ...baseEnv, ...env });
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it('accepts real-looking keys in production', () => {
+    const result = envSchema.parse({
+      ...baseEnv,
+      ...REAL_LOOKING_TURNSTILE_KEYS,
+      NODE_ENV: 'production',
+    });
+    expect(result.TURNSTILE_SITE_KEY).toBe(
+      REAL_LOOKING_TURNSTILE_KEYS.TURNSTILE_SITE_KEY,
+    );
+    expect(result.TURNSTILE_SECRET_KEY).toBe(
+      REAL_LOOKING_TURNSTILE_KEYS.TURNSTILE_SECRET_KEY,
+    );
+  });
+
+  it('refuses to start in production without the keys', () => {
+    const found = messages({ NODE_ENV: 'production' });
+    expect(found.some((m) => m.includes('TURNSTILE_SITE_KEY'))).toBe(true);
+    expect(found.some((m) => m.includes('TURNSTILE_SECRET_KEY'))).toBe(true);
+  });
+
+  it.each(TEST_SECRETS)(
+    'refuses the published test secret %s in production, without printing it',
+    (secret) => {
+      const found = messages({
+        NODE_ENV: 'production',
+        TURNSTILE_SITE_KEY: REAL_LOOKING_TURNSTILE_KEYS.TURNSTILE_SITE_KEY,
+        TURNSTILE_SECRET_KEY: secret,
+      });
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatch(/TURNSTILE_SECRET_KEY/);
+      expect(found[0]).not.toContain(secret);
+    },
+  );
+
+  it.each(['development', 'test'])(
+    'starts without the keys in %s',
+    (nodeEnv) => {
+      const result = envSchema.parse({ ...baseEnv, NODE_ENV: nodeEnv });
+      expect(result.TURNSTILE_SITE_KEY).toBeUndefined();
+      expect(result.TURNSTILE_SECRET_KEY).toBeUndefined();
+    },
+  );
+
+  it('accepts the published test keys outside production', () => {
+    const result = envSchema.safeParse({
+      ...baseEnv,
+      NODE_ENV: 'test',
+      TURNSTILE_SITE_KEY: TEST_SITE_KEY,
+      TURNSTILE_SECRET_KEY: TEST_SECRETS[0],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it.each([
+    ['only the site key', { TURNSTILE_SITE_KEY: TEST_SITE_KEY }],
+    ['only the secret', { TURNSTILE_SECRET_KEY: TEST_SECRETS[0]! }],
+  ])('refuses %s: both or neither', (_label, env) => {
+    const found = messages({ NODE_ENV: 'development', ...env });
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatch(/TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY/);
   });
 });

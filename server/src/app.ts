@@ -18,7 +18,18 @@ import { publicRouter } from './routes/public.js';
 
 export const app = express();
 
-app.use(helmet());
+// helmet's defaults, plus Cloudflare's bot check on the public booking page:
+// its script and the frame it draws the check in.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        'script-src': ["'self'", 'https://challenges.cloudflare.com'],
+        'frame-src': ["'self'", 'https://challenges.cloudflare.com'],
+      },
+    },
+  }),
+);
 
 app.all('/api/auth/*splat', toNodeHandler(auth));
 app.use(express.json({ limit: '10kb' }));

@@ -16,6 +16,7 @@ import {
   requireTestDatabase,
   truncateTables,
 } from './helpers/db-guard.js';
+import { siteverifyPasses, TEST_TOKEN } from './helpers/turnstile-fake.js';
 
 const TRUSTED_ORIGIN = 'http://localhost:3000';
 // 15+ characters, the minimum set in src/auth.ts. Never printed.
@@ -105,7 +106,7 @@ const bookOnline = (slug: string, payload: object) =>
   request(app)
     .post(`/api/public/${slug}/bookings`)
     .set('Origin', TRUSTED_ORIGIN)
-    .send(payload);
+    .send({ turnstileToken: TEST_TOKEN, ...payload });
 
 const bookAsStaff = (orgId: string, payload: object) =>
   asOwner(alice.cookie, 'post', `/api/orgs/${orgId}/bookings`, payload);
@@ -151,6 +152,7 @@ const countFor = async (
 };
 
 beforeAll(async () => {
+  siteverifyPasses();
   client = createClient();
   await connectAndVerify(client);
   alice = await createUser(app, client, {

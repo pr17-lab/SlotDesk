@@ -83,6 +83,23 @@ describe('Serving the built React app', () => {
     );
   });
 
+  // The bot check on the public booking page loads a script and a frame from
+  // Cloudflare. Nothing else is added.
+  it('lets the page load the bot check from Cloudflare only', async () => {
+    const app = await loadApp(builtClient);
+
+    const res = await request(app).get('/book/sunrise-physio');
+
+    const policy = String(res.headers['content-security-policy']).split(';');
+    expect(policy).toContain(
+      "script-src 'self' https://challenges.cloudflare.com",
+    );
+    expect(policy).toContain(
+      "frame-src 'self' https://challenges.cloudflare.com",
+    );
+    expect(policy).toContain("default-src 'self'");
+  });
+
   it('runs as an API only when the folder has no index.html', async () => {
     const app = await loadApp(noClient);
 

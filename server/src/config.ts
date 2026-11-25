@@ -57,6 +57,15 @@ const rateLimitSchema = (name: string, fallback: number) =>
     .transform(Number)
     .default(fallback);
 
+// Cloudflare's published test secrets (always pass, always fail, already
+// spent). Fine for tests, never in production: the first one would let
+// every bot through.
+const TURNSTILE_TEST_SECRETS = new Set([
+  '1x0000000000000000000000000000000AA',
+  '2x0000000000000000000000000000000AA',
+  '3x0000000000000000000000000000000AA',
+]);
+
 // All environment variables (D-022). Exported so tests can check the
 // production rule without touching process.env.
 export const envSchema = z
@@ -86,6 +95,10 @@ export const envSchema = z
     ),
     PUBLIC_BOOKING_RATE_LIMIT: rateLimitSchema('PUBLIC_BOOKING_RATE_LIMIT', 5),
     PUBLIC_DAILY_BOOKING_CAP: rateLimitSchema('PUBLIC_DAILY_BOOKING_CAP', 20),
+    // The bot check on online bookings (Cloudflare Turnstile). Required in
+    // production; elsewhere, without them online booking answers 503.
+    TURNSTILE_SITE_KEY: z.string().min(1).optional(),
+    TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
   })
   // In production the session cookie must only travel over HTTPS; http is
   // fine for localhost.
@@ -98,6 +111,39 @@ export const envSchema = z
         code: 'custom',
         path: ['BETTER_AUTH_URL'],
         message: 'BETTER_AUTH_URL must use https:// in production',
+      });
+    }
+    const secret = env.TURNSTILE_SECRET_KEY;
+    const hasSiteKey = env.TURNSTILE_SITE_KEY !== undefined;
+    const hasSecret = secret !== undefined;
+    if (env.NODE_ENV === 'production') {
+      if (!hasSiteKey) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TURNSTILE_SITE_KEY'],
+          message: 'TURNSTILE_SITE_KEY is required in production',
+        });
+      }
+      if (secret === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TURNSTILE_SECRET_KEY'],
+          message: 'TURNSTILE_SECRET_KEY is required in production',
+        });
+      } else if (TURNSTILE_TEST_SECRETS.has(secret)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['TURNSTILE_SECRET_KEY'],
+          message:
+            "TURNSTILE_SECRET_KEY is one of Cloudflare's test secrets, which can't be used in production",
+        });
+      }
+    } else if (hasSiteKey !== hasSecret) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['TURNSTILE_SECRET_KEY'],
+        message:
+          'Set both TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY, or neither',
       });
     }
   });
@@ -121,6 +167,15 @@ export const config = {
   publicRequestRateLimit: parsed.data.PUBLIC_REQUEST_RATE_LIMIT,
   publicBookingRateLimit: parsed.data.PUBLIC_BOOKING_RATE_LIMIT,
   publicDailyBookingCap: parsed.data.PUBLIC_DAILY_BOOKING_CAP,
+  // null when the keys aren't set: online booking is then off.
+  turnstile:
+    parsed.data.TURNSTILE_SITE_KEY !== undefined &&
+    parsed.data.TURNSTILE_SECRET_KEY !== undefined
+      ? {
+          siteKey: parsed.data.TURNSTILE_SITE_KEY,
+          secretKey: parsed.data.TURNSTILE_SECRET_KEY,
+        }
+      : null,
   // Defaults to client/dist next to server/. src/ and dist/ sit at the same
   // depth, so this works under tsx and after the build.
   clientDistDir: path.resolve(
