@@ -1,6 +1,6 @@
 # SlotDesk
 
-A multi-tenant appointment booking app: an API and a React client. Businesses (organizations) have staff and, later, bookable resources such as a person or a room. The two things it is built to get right are:
+A multi-tenant appointment booking app: an API and a React client. Businesses (organizations) have staff and bookable resources, such as a person or a room. The two things it is built to get right are:
 
 - **No double booking**, even when many people book the same slot at the same moment. The database enforces it.
 - **No data leaking between organizations.** Every organization route checks membership, and every query is scoped to the organization.
@@ -22,13 +22,20 @@ This is a work in progress. What exists and is tested today:
 - The booking tables, including a database rule that makes overlapping confirmed bookings impossible, and tests that prove it under 30 concurrent connections and under 10 simultaneous requests to the booking route.
 - The API runs on a free Render instance with a Neon database, and serves the React client from the same address.
 
-The React client so far has sign up, sign in and sign out; the booking screens come next. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+The React client has:
+
+- Sign-up, sign-in and sign-out.
+- A home page with your organizations and your role in each, and a form to create one.
+- An organization page with its resources and services. The owner can add both, and while the organization is empty, create sample data in one click.
+- A resource page with a 7-day schedule (pick a service, click a free slot, book a guest), the list of bookings with a cancel button, and the working hours (the owner can edit them; staff can read them).
+
+Members are managed through the API only; there is no members screen. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live app:** `https://slotdesk-wfgi.onrender.com` (the API health check is `/api/health`). It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
 ## Tech stack
 
-Node 24, TypeScript (strict), Express 5, React 19 with React Router, Vite, Tailwind CSS, PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, `temporal-polyfill` (time zone checks), pino, Vitest, Supertest and Testing Library, ESLint and Prettier, GitHub Actions.
+Node 24, TypeScript (strict), Express 5, React 19 with React Router, Vite, Tailwind CSS, shadcn/ui (on Base UI), PostgreSQL 17, `pg` with hand-written SQL, `node-pg-migrate`, Better Auth, Zod, `temporal-polyfill` (time zone checks), pino, Vitest, Supertest and Testing Library, Playwright, ESLint and Prettier, GitHub Actions.
 
 ## API
 
@@ -169,8 +176,18 @@ npm test
 npm run test:db
 ```
 
-- `npm test` runs the unit tests and needs no database.
+- `npm test` runs the unit tests and needs no database. In `client`, they are Testing Library tests against a fake API.
 - `npm run test:db` runs the database tests against `slotdesk_test`. It deletes and re-creates the tables in that database on every run and refuses to run against any database whose name does not end in `_test`. The booking race tests (30 database connections, and 10 simultaneous HTTP requests) are part of it. Some tests kill database connections on purpose, so error lines in its output (for example `Idle database client error`) are expected; what matters is the final summary.
+
+The browser smoke test in `e2e` runs the built client and server against a real database in Chromium: it signs up, adds sample data and books a slot, and checks that the sign-in page looks the same in light and dark mode. To run it, build `client` and `server`, run `npm run migrate:up` in `server`, and set `BETTER_AUTH_URL=http://localhost:3000` in `server\.env`. Then, from the `e2e` folder:
+
+```powershell
+npm ci
+npx playwright install chromium
+npm test
+```
+
+It starts the server itself (or uses one already running on port 3000) and creates a new account in the `slotdesk` database on each run.
 
 ### If something fails
 
@@ -199,7 +216,10 @@ client/
   src/
     main.tsx, routes.tsx   start-up and the list of pages (React Router)
     api.ts                 calls to our API, with a clear message for each error
+    session.ts             who is signed in, and sign-out
     pages/                 one file per page
+    ui.tsx                 our shared pieces (cards, fields, dialog, buttons)
+    components/ui/         the shadcn/ui components they are built on
   test/                    Testing Library tests
 server/
   src/
@@ -215,8 +235,9 @@ server/
   migrations/              SQL migration files
   scripts/audit-check.ts   the CI dependency audit, with exceptions in audit-exceptions.json
   test/                    unit tests; test/db holds the database tests
+e2e/                       the browser smoke test (Playwright)
 docker-compose.yml         local PostgreSQL 17
-.github/workflows/ci.yml   CI: checks, tests and a dependency audit
+.github/workflows/ci.yml   CI: checks, tests, the smoke test and a dependency audit
 ```
 
 ## More
