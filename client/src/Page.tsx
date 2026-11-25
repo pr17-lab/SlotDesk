@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Form, Link, useNavigation, useRouteLoaderData } from 'react-router';
 import { Button } from '@/components/ui/button';
 import type { Session } from './session';
-import { focusStyle } from './ui';
+import { focusStyle, LogoMark } from './ui';
 
 export function Page({
   children,
@@ -33,8 +33,9 @@ export function Page({
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link
             to="/"
-            className={`text-primary rounded-lg text-lg font-semibold ${focusStyle}`}
+            className={`font-heading text-foreground flex items-center gap-2 rounded-lg text-lg font-semibold ${focusStyle}`}
           >
+            <LogoMark />
             SlotDesk
           </Link>
           {session && (

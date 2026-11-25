@@ -1,3 +1,4 @@
+import { Clock, DoorOpen } from 'lucide-react';
 import { useEffect, useRef, type RefObject } from 'react';
 import {
   redirect,
@@ -187,7 +188,7 @@ export function Organization() {
         items={[{ label: 'Organizations', to: '/' }, { label: org.name }]}
       />
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{org.name}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">{org.name}</h1>
         <RoleBadge role={org.role} />
       </div>
 
@@ -199,7 +200,7 @@ export function Organization() {
 
       <div className="mt-8 grid items-start gap-6 md:grid-cols-2">
         <div className="space-y-6">
-          <Card title="Resources">
+          <Card title="Resources" icon={DoorOpen}>
             {resources.length === 0 ? (
               <p className="text-muted-foreground mt-2">No resources yet.</p>
             ) : (
@@ -219,7 +220,7 @@ export function Organization() {
         </div>
 
         <div className="space-y-6">
-          <Card title="Services">
+          <Card title="Services" icon={Clock}>
             {services.length === 0 ? (
               <p className="text-muted-foreground mt-2">No services yet.</p>
             ) : (

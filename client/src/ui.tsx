@@ -1,5 +1,6 @@
 import { useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { Link } from 'react-router';
+import { CalendarCheck, type LucideIcon } from 'lucide-react';
 import type { Org } from './api';
 import { Badge as ShadcnBadge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -41,9 +42,11 @@ export function TextField({ label, hint, ...inputProps }: TextFieldProps) {
 
 export function Card({
   title,
+  icon: Icon,
   children,
 }: {
   title: string;
+  icon?: LucideIcon;
   children: ReactNode;
 }) {
   const id = useId();
@@ -51,13 +54,26 @@ export function Card({
   return (
     <section
       aria-labelledby={id}
-      className="bg-card border-border rounded-lg border p-4 shadow-sm sm:p-5"
+      className="bg-card border-border shadow-card rounded-xl border p-4 sm:p-6"
     >
-      <h2 id={id} className="text-lg font-semibold">
+      <h2 id={id} className="flex items-center gap-2 text-lg font-semibold">
+        {Icon && <Icon aria-hidden="true" className="text-primary size-5" />}
         {title}
       </h2>
       {children}
     </section>
+  );
+}
+
+// The app's mark: a calendar tick on the brand green.
+export function LogoMark({ large = false }: { large?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`bg-primary text-primary-foreground inline-flex items-center justify-center rounded-lg ${large ? 'size-12' : 'size-8'}`}
+    >
+      <CalendarCheck className={large ? 'size-6' : 'size-5'} />
+    </span>
   );
 }
 
@@ -71,11 +87,17 @@ export function AuthCard({
 }) {
   return (
     <div className="mx-auto max-w-sm">
-      <p className="text-muted-foreground text-center">
-        Booking slots for small clinics and studios
-      </p>
-      <section className="bg-card border-border mt-4 rounded-lg border p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold">{title}</h1>
+      <div className="flex flex-col items-center text-center">
+        <LogoMark large />
+        <p className="font-heading mt-4 text-xl font-semibold text-balance">
+          Booking slots for small clinics and studios
+        </p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Set your hours once. Book and cancel in two clicks.
+        </p>
+      </div>
+      <section className="bg-card border-border shadow-card mt-8 rounded-xl border p-6">
+        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         {children}
       </section>
     </div>

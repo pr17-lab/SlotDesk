@@ -1,3 +1,4 @@
+import { ListChecks } from 'lucide-react';
 import { useState } from 'react';
 import { useFetcher } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -44,7 +45,7 @@ export function Bookings({
     fetcher.data && 'notice' in fetcher.data ? fetcher.data.notice : undefined;
 
   return (
-    <Card title="Bookings">
+    <Card title="Bookings" icon={ListChecks}>
       <FormMessage result={{ notice }} />
       {bookings.length === 0 ? (
         <p className="text-muted-foreground mt-2">
