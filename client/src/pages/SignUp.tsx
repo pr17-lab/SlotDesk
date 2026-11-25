@@ -9,7 +9,7 @@ import type { ActionFunctionArgs } from 'react-router';
 import { api, ApiError } from '../api';
 import { Page } from '../Page';
 import { Button } from '@/components/ui/button';
-import { focusStyle, TextField } from '../ui';
+import { AuthCard, focusStyle, TextField } from '../ui';
 
 export async function signUpAction({ request }: ActionFunctionArgs) {
   const form = await request.formData();
@@ -44,42 +44,43 @@ export function SignUp() {
 
   return (
     <Page>
-      <h1 className="text-2xl font-semibold">Create an account</h1>
-      <Form method="post" className="mt-6 space-y-4">
-        <TextField label="Name" name="name" required autoComplete="name" />
-        <TextField
-          label="Email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-        />
-        <TextField
-          label="Password"
-          name="password"
-          type="password"
-          required
-          minLength={15}
-          autoComplete="new-password"
-          hint="At least 15 characters"
-        />
-        {error && (
-          <p role="alert" className="text-destructive">
-            {error}
-          </p>
-        )}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? 'Creating account…' : 'Create account'}
-        </Button>
-      </Form>
-      <p className="mt-6">
-        <Link
-          to="/sign-in"
-          className={`text-primary rounded-lg underline ${focusStyle}`}
-        >
-          Sign in instead
-        </Link>
-      </p>
+      <AuthCard title="Create an account">
+        <Form method="post" className="mt-6 space-y-4">
+          <TextField label="Name" name="name" required autoComplete="name" />
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+          />
+          <TextField
+            label="Password"
+            name="password"
+            type="password"
+            required
+            minLength={15}
+            autoComplete="new-password"
+            hint="At least 15 characters"
+          />
+          {error && (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={submitting} className="w-full">
+            {submitting ? 'Creating account…' : 'Create account'}
+          </Button>
+        </Form>
+        <p className="mt-6 text-center text-sm">
+          <Link
+            to="/sign-in"
+            className={`text-primary rounded-lg underline ${focusStyle}`}
+          >
+            Sign in instead
+          </Link>
+        </p>
+      </AuthCard>
     </Page>
   );
 }

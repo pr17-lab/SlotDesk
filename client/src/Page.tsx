@@ -29,9 +29,8 @@ export function Page({
         </div>
       )}
       <header className="border-border bg-card border-b">
-        <div
-          className={`mx-auto flex ${width} items-center justify-between gap-4 px-4 py-3 sm:px-6`}
-        >
+        {/* As wide as the widest page, so it doesn't jump between pages. */}
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link
             to="/"
             className={`text-primary rounded-lg text-lg font-semibold ${focusStyle}`}
@@ -40,7 +39,7 @@ export function Page({
           </Link>
           {session && (
             <div className="flex min-w-0 items-center gap-3">
-              <span className="text-muted-foreground truncate text-sm">
+              <span className="text-muted-foreground hidden truncate text-sm sm:block">
                 {session.user.email}
               </span>
               <Form method="post" action="/sign-out" className="shrink-0">

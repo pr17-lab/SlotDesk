@@ -51,13 +51,34 @@ export function Card({
   return (
     <section
       aria-labelledby={id}
-      className="bg-card border-border rounded-lg border p-5 shadow-sm"
+      className="bg-card border-border rounded-lg border p-4 shadow-sm sm:p-5"
     >
       <h2 id={id} className="text-lg font-semibold">
         {title}
       </h2>
       {children}
     </section>
+  );
+}
+
+// Sign-in and sign-up: one centred card under a line on what SlotDesk is for.
+export function AuthCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mx-auto max-w-sm">
+      <p className="text-muted-foreground text-center">
+        Booking slots for small clinics and studios
+      </p>
+      <section className="bg-card border-border mt-4 rounded-lg border p-6 shadow-sm">
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        {children}
+      </section>
+    </div>
   );
 }
 
@@ -142,7 +163,9 @@ export function Modal({
         finalFocus={() => opener}
         className="block"
       >
-        <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
+        <DialogTitle className="text-lg leading-snug font-semibold">
+          {title}
+        </DialogTitle>
         {children}
       </DialogContent>
     </Dialog>
