@@ -36,7 +36,7 @@ flowchart TD
 
 Two ordering rules matter. The Better Auth handler must come before `express.json()`, or auth requests hang. And every route lives under `/api`, so the React app can share the API's origin without an API path ever colliding with a page URL. The app is served after the API routes, and a path starting with `/api` never gets the page, in any letter case, so a wrong API URL still gets the JSON 404.
 
-Routes handle HTTP and input validation (Zod). The SQL lives in separate data functions in `src/data/`. There is no service layer yet, because there are no business rules to put in one.
+Routes handle HTTP and input validation (Zod). The SQL lives in separate data functions in `src/data/`. There is no separate service layer. The one rule that needs more than a query, accepting a booking only for a start the availability function would offer, runs inside the booking transaction in `src/data/bookings.ts` (section 3).
 
 ## 2. Tenant isolation
 
@@ -74,7 +74,7 @@ The booking transaction is: begin, lock the resource row (scoped to the organiza
 
 What is built: the tables, the constraint, tests that prove it (section 7), and the mapping of database errors to HTTP responses: an overlap or a duplicate is 409, a bad reference is 404 (the same answer as a missing row), a bad value is 400, and a deadlock or serialization failure is 503 with `Retry-After: 1`. Deadlocks are not retried automatically: with the resource row locked first none are expected, so retry code would only hide a new locking bug. The mapped errors are logged with the error code, constraint name and table name only, never the rejected values. Creating a booking is built (`POST /api/orgs/:orgId/bookings`): inside the transaction it reads the service and working hours, accepts the start only if the availability function would offer it, and sets the end from the service's duration. That check never looks at other bookings; an overlap is left to the constraint, which answers 409. Because saving working hours takes the same lock, the hours cannot change between the check and the insert. Listing, viewing and cancelling are built too. Cancelling sets the status to `cancelled` in one update, with no lock, because it can never create an overlap; the row stays, so the list shows cancelled bookings with their status. The list takes local dates in the resource's time zone and turns them into one exact UTC range in `src/availability.ts`, so a booking is listed on the local date it starts.
 
-The constraint covers overlaps only. Working hours and similar rules will be application rules, so code that bypasses the API could break them. That limit is accepted.
+The constraint covers overlaps only. Working hours and similar rules are application rules, so code that bypasses the API could break them. That limit is accepted.
 
 ## 4. Data model and database access
 
@@ -118,7 +118,7 @@ The settings that matter:
 - **Rate limits on our own routes.** `/api/orgs` has two limits per client address (the same header) in each 15 minutes: 100 requests that change data, and 600 requests of any kind. Over a limit the answer is 429 `{ "error": "Too Many Requests" }` with `Retry-After`. They run before the origin check and the session lookup, so a flood never costs a database query. The writes limit exists because anyone can sign up, and one account could otherwise fill the free database; the all-requests limit protects the free instance's small CPU and the database's monthly compute hours. Counts are kept in memory. IPv6 addresses in the same /56 share one count. `/api/health` is not limited, and `/api/auth` has Better Auth's own limit.
 - **Password hashing** is our own code in `src/password.ts`, passed to Better Auth as its `hash` and `verify`. It uses scrypt with N=2^15, r=8, p=3. OWASP's minimum is N=2^17, r=8, p=1, and it lists N=2^15, r=8, p=3 as equivalent (32 MiB of memory per hash instead of 128 MiB). The settings are stored inside each hash (`scrypt:N:r:p:salt:key`), so the cost can be changed later while old hashes still verify. Passwords are NFKC-normalised, hashes are compared in constant time, and the settings read back from a stored hash have upper limits. A malformed stored hash throws, which becomes a 500 and never a wrong-password 401. The cost was measured on the free Render instance before any real account existed: a warm sign-in takes about 1.7 seconds there. That is slower than the 1.5 seconds first aimed for, and the cost was kept anyway: sign-in is rare, and most of the time is the free instance's small CPU.
 
-Better Auth was adopted provisionally. The remaining check, that the future React client calls `/api/auth/get-session` and trusts one origin in both places, waits for the client.
+Better Auth was adopted provisionally, then confirmed once the React client existed: the client calls `/api/auth/get-session` on its own origin, the server trusts that one origin (`BETTER_AUTH_URL`), and on the deployed service every browser request that changes data passed the exact `Origin` check.
 
 ## 6. Configuration and deployment
 
@@ -143,6 +143,8 @@ Better Auth was adopted provisionally. The remaining check, that the future Reac
 |---|---|
 | `npm test` | Unit tests, including the availability and daylight saving time cases. No database needed. |
 | `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races, authentication checks, and the organization, member, resource, service, working-hours, availability and booking routes through the real app. |
+| `npm test` in `client` | Testing Library tests of the screens, rendering the real routes against a fake API. |
+| `npm test` in `e2e` | A Playwright smoke test in Chromium: the built client and server against a real database. It signs up, adds sample data and books a slot, and checks that the sign-in page looks the same in light and dark mode. |
 
 The database tests commit for real, create their own data, and run one file at a time. A guard refuses to run unless the database name ends in `_test`, and the guard has its own test.
 
@@ -152,7 +154,7 @@ The booking concurrency tests have three layers:
 2. **HTTP race.** 10 simultaneous requests to the booking route on one running server, over 20 rounds, in two shapes. Identical slot: exactly one 201 and nine 409s each round. Staggered: starts 15 minutes apart with a 60-minute service, so each request overlaps its neighbours; every answer must be 201 or 409, and every 409 must overlap a booking that won. A deadlock is answered with 503, so the staggered race is what proves the resource-row lock: with the lock removed it fails on almost every run. Both tests also check that all requests were sent before the first answer arrived.
 3. **Mutation proof.** The same harness runs against a scratch schema with no constraint and a check-then-insert. It must produce more than one winner in some round, and fails otherwise. This proves the race harness can detect a double booking, so a passing layer 1 means something.
 
-CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17, a check that no file is stored with Windows line endings, and a dependency audit. An advisory with no fix can be accepted only by listing it, with a reason and an expiry date, in `server/audit-exceptions.json`; an expired or no-longer-needed entry fails the audit too.
+CI (GitHub Actions) runs a check that no file is stored with Windows line endings; for the server, type-check, lint, format check, build, unit tests, migrations and the database tests against PostgreSQL 17; for the client, type-check, lint, format check, tests and build; the smoke test; and a dependency audit of the server, the client and `e2e`. An advisory with no fix can be accepted only by listing it, with a reason and an expiry date, in `server/audit-exceptions.json`; an expired or no-longer-needed entry fails the audit too.
 
 ## 8. Known limits
 
@@ -162,7 +164,6 @@ CI (GitHub Actions) runs type-check, lint, format check, build, unit tests, migr
 - Several users behind one address, such as an office or a mobile carrier's shared address, share one count.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
-- The React client so far is a home page that shows whether you are signed in.
 - A booking cannot be edited or un-cancelled; cancel it and book again.
 - Availability and booking are members-only for now (staff book for guest customers), and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered or accepted. A client that retries after losing the response to a booking gets a 409 for its own booking.
 - Working hours cannot run past midnight, and there are no holidays, time off or buffers between bookings.
