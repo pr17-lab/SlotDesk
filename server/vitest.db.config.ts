@@ -22,6 +22,10 @@ export default defineConfig({
       // are tested in test/rate-limit.test.ts.
       WRITE_RATE_LIMIT: '100000',
       REQUEST_RATE_LIMIT: '100000',
+      // The same for /api/public. The daily cap keeps its default of 20: the
+      // cap tests rely on it.
+      PUBLIC_REQUEST_RATE_LIMIT: '100000',
+      PUBLIC_BOOKING_RATE_LIMIT: '100000',
     },
   },
 });

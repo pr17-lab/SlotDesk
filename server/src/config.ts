@@ -77,6 +77,15 @@ export const envSchema = z
     // every request. The database tests raise both.
     WRITE_RATE_LIMIT: rateLimitSchema('WRITE_RATE_LIMIT', 100),
     REQUEST_RATE_LIMIT: rateLimitSchema('REQUEST_RATE_LIMIT', 600),
+    // Online booking, on /api/public: requests per address and 15 minutes,
+    // bookings per address and hour, and online bookings per room in any 24
+    // hours (the cap that bounds the total, whoever is booking).
+    PUBLIC_REQUEST_RATE_LIMIT: rateLimitSchema(
+      'PUBLIC_REQUEST_RATE_LIMIT',
+      300,
+    ),
+    PUBLIC_BOOKING_RATE_LIMIT: rateLimitSchema('PUBLIC_BOOKING_RATE_LIMIT', 5),
+    PUBLIC_DAILY_BOOKING_CAP: rateLimitSchema('PUBLIC_DAILY_BOOKING_CAP', 20),
   })
   // In production the session cookie must only travel over HTTPS; http is
   // fine for localhost.
@@ -109,6 +118,9 @@ export const config = {
   authUrl: parsed.data.BETTER_AUTH_URL,
   writeRateLimit: parsed.data.WRITE_RATE_LIMIT,
   requestRateLimit: parsed.data.REQUEST_RATE_LIMIT,
+  publicRequestRateLimit: parsed.data.PUBLIC_REQUEST_RATE_LIMIT,
+  publicBookingRateLimit: parsed.data.PUBLIC_BOOKING_RATE_LIMIT,
+  publicDailyBookingCap: parsed.data.PUBLIC_DAILY_BOOKING_CAP,
   // Defaults to client/dist next to server/. src/ and dist/ sit at the same
   // depth, so this works under tsx and after the build.
   clientDistDir: path.resolve(

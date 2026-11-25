@@ -36,8 +36,8 @@ const startsAtSchema = z.iso
 const customerEmailSchema = z.string().trim().pipe(z.email().max(254));
 
 // Strict, so a misspelt key is a 400. The organization never comes from the
-// body.
-const createBookingSchema = z.strictObject({
+// body. The public page takes the same fields.
+export const createBookingSchema = z.strictObject({
   resourceId: idSchema,
   serviceId: idSchema,
   startsAt: startsAtSchema,
@@ -54,6 +54,15 @@ const listBookingsQuerySchema = withDateRangeRules(
     to: localDate,
   }),
 );
+
+// Shaped like a validation error, with its own message so a client can tell
+// it apart from a malformed start.
+export function sendNotOffered(res: Response): void {
+  res.status(400).json({
+    error: 'Bad Request',
+    details: [{ path: 'startsAt', message: 'This start time is not offered' }],
+  });
+}
 
 // No mergeParams: the organization comes from res.locals.membership.
 export const bookingsRouter = Router();
@@ -77,15 +86,12 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     return;
   }
   if (result.status === 'notOffered') {
-    // Shaped like a validation error, with its own message so a client can
-    // tell it apart from a malformed start.
-    res.status(400).json({
-      error: 'Bad Request',
-      details: [
-        { path: 'startsAt', message: 'This start time is not offered' },
-      ],
-    });
+    sendNotOffered(res);
     return;
+  }
+  if (result.status === 'capReached') {
+    // The cap is only for online bookings, which never come through here.
+    throw new Error('Daily cap applied to a staff booking');
   }
   res.status(201).json(result.booking);
 });

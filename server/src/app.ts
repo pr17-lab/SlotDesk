@@ -6,9 +6,15 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './auth.js';
 import { config } from './config.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
-import { requestLimiter, writeLimiter } from './middleware/rate-limit.js';
+import {
+  publicBookingLimiter,
+  publicRequestLimiter,
+  requestLimiter,
+  writeLimiter,
+} from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { orgsRouter } from './routes/orgs.js';
+import { publicRouter } from './routes/public.js';
 
 export const app = express();
 
@@ -22,6 +28,14 @@ app.use('/api', healthRouter);
 // session lookup or any database query. The write limiter goes last so its
 // headers show on writes, where it is the tighter one.
 app.use('/api/orgs', requestLimiter, writeLimiter, orgsRouter);
+// The public booking page: no session, its own counts, and bookings limited
+// per hour. Kept apart from /api/orgs so a staff route can't become public.
+app.use(
+  '/api/public',
+  publicRequestLimiter,
+  publicBookingLimiter,
+  publicRouter,
+);
 
 // The built React app, if there is one. React Router handles page paths, so
 // any other GET gets index.html, except /api paths (D-019). Express ignores

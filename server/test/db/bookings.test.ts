@@ -186,6 +186,7 @@ describe('creating a booking', () => {
       status: 'confirmed',
       customerName: 'Guest Customer',
       customerEmail: 'guest@example.com',
+      source: 'staff',
       createdAt: expect.any(String),
     });
   });

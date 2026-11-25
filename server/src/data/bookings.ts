@@ -16,6 +16,8 @@ export type Booking = {
   status: 'confirmed' | 'cancelled';
   customerName: string;
   customerEmail: string;
+  // Who made it: staff, or a customer on the public booking page.
+  source: 'staff' | 'public';
   createdAt: Date;
 };
 
@@ -25,15 +27,28 @@ export type Booking = {
 const BOOKING_COLUMNS = `id, resource_id AS "resourceId", service_id AS "serviceId",
   starts_at AS "startsAt", ends_at AS "endsAt", status,
   customer_name AS "customerName", customer_email AS "customerEmail",
-  created_at AS "createdAt"`;
+  source, created_at AS "createdAt"`;
 
-// Two kinds of failure, because the route answers them differently: 404 for
-// a resource or service not in this organization, 400 for a start that isn't
-// offered.
+// The route answers each failure differently: 404 for a resource or service
+// not in this organization, 400 for a start that isn't offered, 429 when the
+// room's online bookings for the day are used up. The names come back so the
+// public page can confirm what was booked.
 export type CreateBookingResult =
-  | { status: 'created'; booking: Booking }
+  | {
+      status: 'created';
+      booking: Booking;
+      resourceName: string;
+      serviceName: string;
+      timeZone: string;
+    }
   | { status: 'notFound' }
-  | { status: 'notOffered' };
+  | { status: 'notOffered' }
+  | { status: 'capReached' };
+
+// Extra rules for a booking from the public page: it must start before
+// latestStart, and the room takes at most dailyCap online bookings created
+// in any 24 hours.
+export type OnlineRules = { latestStart: Date; dailyCap: number };
 
 // Books one guest into one slot in a single transaction: lock the resource
 // row, read the service and working hours, check the start, insert (D-012).
@@ -43,6 +58,11 @@ export type CreateBookingResult =
 // just makes requests for the same resource wait their turn instead of
 // deadlocking. Saving working hours takes the same lock, so the hours can't
 // change under us between the read and the insert.
+//
+// With `online` set, the booking is stored as 'public'. The same lock makes
+// the daily count exact: two online bookings for one room can't both count
+// 19 and both get in, because the second counts only after the first
+// commits.
 export async function createBooking(
   orgId: string,
   request: {
@@ -53,10 +73,11 @@ export async function createBooking(
     customerEmail: string;
   },
   now: Date,
+  online?: OnlineRules,
 ): Promise<CreateBookingResult> {
   return withTransaction(async (client) => {
-    const resource = await client.query<{ timeZone: string }>(
-      `SELECT time_zone AS "timeZone" FROM resources
+    const resource = await client.query<{ name: string; timeZone: string }>(
+      `SELECT name, time_zone AS "timeZone" FROM resources
        WHERE org_id = $1 AND id = $2 FOR UPDATE`,
       [orgId, request.resourceId],
     );
@@ -64,8 +85,11 @@ export async function createBooking(
       // Nothing was written, so committing here is harmless.
       return { status: 'notFound' };
     }
-    const service = await client.query<{ durationMinutes: number }>(
-      `SELECT duration_minutes AS "durationMinutes" FROM services
+    const service = await client.query<{
+      name: string;
+      durationMinutes: number;
+    }>(
+      `SELECT name, duration_minutes AS "durationMinutes" FROM services
        WHERE org_id = $1 AND id = $2`,
       [orgId, request.serviceId],
     );
@@ -88,12 +112,31 @@ export async function createBooking(
       return { status: 'notOffered' };
     }
 
+    if (online !== undefined) {
+      // Past the horizon counts as not offered, same as the public page's
+      // free times.
+      if (Date.parse(slot.startsAt) >= online.latestStart.getTime()) {
+        return { status: 'notOffered' };
+      }
+      // Cancelled ones count too: the cap limits how many rows a stranger
+      // can create in a day, and so how many staff might have to clean up.
+      const recent = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM bookings
+         WHERE org_id = $1 AND resource_id = $2 AND source = 'public'
+           AND created_at > now() - interval '24 hours'`,
+        [orgId, request.resourceId],
+      );
+      if (recent.rows[0].count >= online.dailyCap) {
+        return { status: 'capReached' };
+      }
+    }
+
     // Store the slot's times, not the request's: the end is always the
     // start plus the service's duration.
     const inserted = await client.query<Booking>(
       `INSERT INTO bookings
-         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING ${BOOKING_COLUMNS}`,
       [
         orgId,
@@ -103,9 +146,16 @@ export async function createBooking(
         slot.endsAt,
         request.customerName,
         request.customerEmail,
+        online === undefined ? 'staff' : 'public',
       ],
     );
-    return { status: 'created', booking: inserted.rows[0] };
+    return {
+      status: 'created',
+      booking: inserted.rows[0],
+      resourceName: resource.rows[0].name,
+      serviceName: service.rows[0].name,
+      timeZone: resource.rows[0].timeZone,
+    };
   });
 }
 
