@@ -4,6 +4,9 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/fraunces';
 
+/* No dark theme yet: shadcn's dark: styles apply only under a .dark class, which we never set. */
+@custom-variant dark (&:is(.dark *));
+
 /* shadcn/ui's colour names, with our palette. Screens use these names, not raw colours. */
 :root {
   --radius: 0.5rem;
