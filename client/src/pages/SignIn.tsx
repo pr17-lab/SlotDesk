@@ -9,7 +9,7 @@ import type { ActionFunctionArgs } from 'react-router';
 import { api, ApiError } from '../api';
 import { Page } from '../Page';
 import { Button } from '@/components/ui/button';
-import { focusStyle, TextField } from '../ui';
+import { AuthCard, focusStyle, TextField } from '../ui';
 
 export async function signInAction({ request }: ActionFunctionArgs) {
   const form = await request.formData();
@@ -38,39 +38,40 @@ export function SignIn() {
 
   return (
     <Page>
-      <h1 className="text-2xl font-semibold">Sign in</h1>
-      <Form method="post" className="mt-6 space-y-4">
-        <TextField
-          label="Email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-        />
-        <TextField
-          label="Password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-        />
-        {error && (
-          <p role="alert" className="text-destructive">
-            {error}
-          </p>
-        )}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </Button>
-      </Form>
-      <p className="mt-6">
-        <Link
-          to="/sign-up"
-          className={`text-primary rounded-lg underline ${focusStyle}`}
-        >
-          Create an account
-        </Link>
-      </p>
+      <AuthCard title="Sign in">
+        <Form method="post" className="mt-6 space-y-4">
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+          />
+          <TextField
+            label="Password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+          />
+          {error && (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={submitting} className="w-full">
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </Form>
+        <p className="mt-6 text-center text-sm">
+          <Link
+            to="/sign-up"
+            className={`text-primary rounded-lg underline ${focusStyle}`}
+          >
+            Create an account
+          </Link>
+        </p>
+      </AuthCard>
     </Page>
   );
 }

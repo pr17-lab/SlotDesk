@@ -78,6 +78,7 @@ describe('api', () => {
       'Too many requests, wait a few minutes',
     ],
     [503, { error: 'Service Unavailable' }, 'Busy, try again'],
+    [502, undefined, 'Cannot reach the server, try again'],
     [500, { error: 'Internal Server Error' }, 'Something went wrong'],
   ])('a %i gets a clear message', async (status, body, message) => {
     vi.stubGlobal('fetch', answer(status, body));

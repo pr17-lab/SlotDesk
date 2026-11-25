@@ -20,6 +20,9 @@ const messages: Record<number, string> = {
   404: 'Not found',
   409: 'This conflicts with something that exists',
   429: 'Too many requests, wait a few minutes',
+  // A proxy in front of the API (Vite's, in development) answers 502 when
+  // the API isn't running.
+  502: 'Cannot reach the server, try again',
   503: 'Busy, try again',
 };
 

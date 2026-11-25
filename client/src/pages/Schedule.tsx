@@ -204,7 +204,7 @@ export function Schedule({
   return (
     <Card title="Schedule">
       <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
-        <Form method="get">
+        <Form method="get" className="w-full sm:w-auto">
           <input type="hidden" name="from" value={from} />
           <Label htmlFor="service">Service</Label>
           <NativeSelect
@@ -212,7 +212,7 @@ export function Schedule({
             name="service"
             value={service.id}
             onChange={(event) => submit(event.currentTarget.form)}
-            className="mt-1"
+            className="mt-1 w-full sm:w-fit"
           >
             {services.map((item) => (
               <NativeSelectOption key={item.id} value={item.id}>
@@ -244,6 +244,12 @@ export function Schedule({
       {/* One grid for phone and laptop. From md up, each day's <li> and its
           list use display: contents, so all their items join this grid. */}
       <ol className="mt-4 md:grid md:grid-cols-[auto_repeat(7,minmax(0,1fr))] md:gap-x-2 md:gap-y-1">
+        {/* Fills the corner above the times, so the pinned day headers have
+            no gap on the left. */}
+        <li
+          aria-hidden="true"
+          className="bg-card hidden md:sticky md:top-0 md:z-10 md:col-start-1 md:row-start-1 md:block"
+        />
         {rows.map((row) => (
           <li
             key={startOf(row)}
@@ -296,7 +302,7 @@ export function Schedule({
                       className={`bg-primary/10 border-primary text-foreground rounded-lg border-l-4 px-1 py-1 text-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
                     >
                       <span aria-hidden="true">
-                        <span className="block text-[11px] font-medium whitespace-nowrap">
+                        <span className="block text-xs font-medium">
                           {timeRange(item.startsAt, item.endsAt, timeZone)}
                         </span>
                         <span className="line-clamp-2">
