@@ -5,10 +5,14 @@ import type { Params } from 'react-router';
 
 export class ApiError extends Error {
   status: number;
+  // The server's own name for the error, like "Daily limit reached", for a
+  // screen that tells two errors with the same status apart.
+  serverError?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, serverError?: string) {
     super(message);
     this.status = status;
+    this.serverError = serverError;
   }
 }
 
@@ -46,7 +50,12 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   if (!res.ok) {
     const message =
       fieldMessage(data) ?? messages[res.status] ?? 'Something went wrong';
-    throw new ApiError(res.status, message);
+    const serverError = (data as { error?: unknown } | null)?.error;
+    throw new ApiError(
+      res.status,
+      message,
+      typeof serverError === 'string' ? serverError : undefined,
+    );
   }
   return data as T;
 }
@@ -59,7 +68,13 @@ function fieldMessage(data: unknown): string | undefined {
   return typeof message === 'string' ? message : undefined;
 }
 
-export type Org = { id: string; name: string; role: 'owner' | 'staff' };
+export type Org = {
+  id: string;
+  name: string;
+  role: 'owner' | 'staff';
+  // The public booking page's link name; null while the page is off.
+  bookingSlug: string | null;
+};
 export type Service = { id: string; name: string; durationMinutes: number };
 export type Slot = { startsAt: string; endsAt: string };
 
@@ -72,6 +87,8 @@ export type Booking = {
   status: 'confirmed' | 'cancelled';
   customerName: string;
   customerEmail: string;
+  // 'public' when the customer booked on the online booking page.
+  source: 'staff' | 'public';
 };
 
 // An action's expected failures go back to the page as data, so the page's

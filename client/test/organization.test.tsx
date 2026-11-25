@@ -245,3 +245,93 @@ it('marks link rows with an accent name and an arrow, and plain rows without', a
     '›',
   );
 });
+
+it('lets the owner turn on online booking at a link they choose', async () => {
+  const api = fakeApi({ orgs: [{ ...owner }], resources: [room] });
+  open();
+
+  const online = await screen.findByRole('region', { name: 'Online booking' });
+  expect(
+    within(online).getByText(
+      'Let customers book themselves at a link you choose.',
+    ),
+  ).toBeTruthy();
+  await userEvent.type(
+    within(online).getByLabelText('Link name'),
+    'Sunrise-Physio',
+  );
+  await userEvent.click(
+    within(online).getByRole('button', { name: 'Turn on online booking' }),
+  );
+
+  expect(await within(online).findByText('Online booking is on')).toBeTruthy();
+  expect(api.callsTo('PATCH', '/api/orgs/o1')[0].body).toEqual({
+    bookingSlug: 'Sunrise-Physio',
+  });
+  const link = within(online).getByRole('link', {
+    name: 'http://localhost:3000/book/sunrise-physio',
+  });
+  expect(link.getAttribute('href')).toBe('/book/sunrise-physio');
+});
+
+it('lets the owner turn online booking off', async () => {
+  const api = fakeApi({
+    orgs: [{ ...owner, bookingSlug: 'northside' }],
+    resources: [room],
+  });
+  open();
+
+  const online = await screen.findByRole('region', { name: 'Online booking' });
+  expect(
+    within(online).getByRole('link', {
+      name: 'http://localhost:3000/book/northside',
+    }),
+  ).toBeTruthy();
+  await userEvent.click(
+    within(online).getByRole('button', { name: 'Turn off' }),
+  );
+
+  expect(await within(online).findByText('Online booking is off')).toBeTruthy();
+  expect(api.callsTo('PATCH', '/api/orgs/o1')[0].body).toEqual({
+    bookingSlug: null,
+  });
+  expect(within(online).queryByRole('link')).toBeNull();
+});
+
+it('says when a link name is taken', async () => {
+  const api = fakeApi({ orgs: [{ ...owner }], resources: [room] });
+  api.failNext('PATCH', '/api/orgs/o1', 409, { error: 'Conflict' });
+  open();
+
+  const online = await screen.findByRole('region', { name: 'Online booking' });
+  await userEvent.type(within(online).getByLabelText('Link name'), 'taken');
+  await userEvent.click(
+    within(online).getByRole('button', { name: 'Turn on online booking' }),
+  );
+
+  expect((await within(online).findByRole('alert')).textContent).toBe(
+    'That link name is taken. Try another.',
+  );
+});
+
+it('shows staff the booking link but not the controls', async () => {
+  fakeApi({ orgs: [{ ...staff, bookingSlug: 'northside' }] });
+  open();
+
+  const online = await screen.findByRole('region', { name: 'Online booking' });
+  expect(
+    within(online).getByRole('link', {
+      name: 'http://localhost:3000/book/northside',
+    }),
+  ).toBeTruthy();
+  expect(within(online).queryByRole('button')).toBeNull();
+  expect(within(online).queryByLabelText('Link name')).toBeNull();
+});
+
+it('shows staff nothing about online booking while it is off', async () => {
+  fakeApi({ orgs: [{ ...staff, bookingSlug: null }] });
+  open();
+
+  await screen.findByText('No resources yet.');
+  expect(screen.queryByRole('region', { name: 'Online booking' })).toBeNull();
+});

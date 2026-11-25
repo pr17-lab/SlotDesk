@@ -485,3 +485,23 @@ it('tells Confirmed and Cancelled apart by tone', async () => {
   expect(confirmed.className).toContain('text-primary');
   expect(screen.getByText('Cancelled').className).not.toContain('text-primary');
 });
+
+it('marks bookings made on the public page as Online', async () => {
+  open({
+    bookings: [
+      booking({ source: 'staff' }),
+      booking({
+        id: 'b2',
+        customerName: 'Meera',
+        source: 'public',
+        startsAt: '2099-01-05T05:30:00.000Z',
+        endsAt: '2099-01-05T06:00:00.000Z',
+      }),
+    ],
+  });
+
+  await screen.findByRole('heading', { name: 'Consultation room' });
+  const [staffRow, onlineRow] = card('Bookings').getAllByRole('listitem');
+  expect(within(staffRow).queryByText('Online')).toBeNull();
+  expect(within(onlineRow).getByText('Online')).toBeTruthy();
+});

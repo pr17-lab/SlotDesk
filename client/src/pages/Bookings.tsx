@@ -75,6 +75,7 @@ export function Bookings({
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
+                  {booking.source === 'public' && <Badge>Online</Badge>}
                   <Badge tone={confirmed ? 'accent' : 'neutral'}>
                     {confirmed ? 'Confirmed' : 'Cancelled'}
                   </Badge>

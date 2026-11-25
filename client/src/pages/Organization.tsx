@@ -1,6 +1,7 @@
-import { Clock, DoorOpen } from 'lucide-react';
+import { Clock, DoorOpen, Globe } from 'lucide-react';
 import { useEffect, useRef, type RefObject } from 'react';
 import {
+  Link,
   redirect,
   useFetcher,
   useLoaderData,
@@ -19,7 +20,9 @@ import {
   FormMessage,
   ListRow,
   RoleBadge,
+  SecondaryButton,
   TextField,
+  focusStyle,
 } from '../ui';
 
 type Resource = { id: string; name: string; timeZone: string };
@@ -36,7 +39,7 @@ export async function organizationLoader({ params }: LoaderFunctionArgs) {
   return { org, resources, services };
 }
 
-// One action for the page's three forms; each sends a hidden `intent`.
+// One action for the page's forms; each says which with `intent`.
 export async function organizationAction({
   request,
   params,
@@ -75,6 +78,16 @@ export async function organizationAction({
       return { notice: 'Service added' };
     }
 
+    // The server trims and lowercases the name; null turns the page off.
+    if (intent === 'booking-link' || intent === 'booking-off') {
+      const bookingSlug =
+        intent === 'booking-off' ? null : String(form.get('bookingSlug'));
+      await api(`/orgs/${orgId}`, { method: 'PATCH', body: { bookingSlug } });
+      return {
+        notice: bookingSlug ? 'Online booking is on' : 'Online booking is off',
+      };
+    }
+
     if (intent === 'sample-data') {
       const created = await api<{ resource: Resource }>(
         `/orgs/${orgId}/sample-data`,
@@ -90,6 +103,13 @@ export async function organizationAction({
       error.status === 409
     ) {
       return null;
+    }
+    if (
+      intent === 'booking-link' &&
+      error instanceof ApiError &&
+      error.status === 409
+    ) {
+      return { error: 'That link name is taken. Try another.' };
     }
     return errorToData(error);
   }
@@ -176,6 +196,75 @@ function AddServiceCard() {
   );
 }
 
+// The owner turns the customer booking page on or off and picks its link.
+// Staff see the link while it is on, and nothing while it is off.
+function OnlineBookingCard({ org }: { org: Org }) {
+  const fetcher = useFetcher<typeof organizationAction>();
+  const saving = fetcher.state !== 'idle';
+  const isOwner = org.role === 'owner';
+  const slug = org.bookingSlug;
+  if (!isOwner && !slug) return null;
+
+  return (
+    <Card title="Online booking" icon={Globe}>
+      {slug ? (
+        <p className="mt-2">
+          {'Customers book at '}
+          <Link
+            to={`/book/${slug}`}
+            className={`text-primary rounded-lg font-medium break-all hover:underline ${focusStyle}`}
+          >
+            {`${window.location.origin}/book/${slug}`}
+          </Link>
+        </p>
+      ) : (
+        <p className="text-muted-foreground mt-2">
+          Let customers book themselves at a link you choose.
+        </p>
+      )}
+      {isOwner && (
+        // A new key when the link changes, so the field shows the saved name.
+        <fetcher.Form method="post" key={slug} className="mt-4 space-y-4">
+          <TextField
+            label="Link name"
+            name="bookingSlug"
+            defaultValue={slug ?? ''}
+            required
+            maxLength={40}
+            hint="3 to 40 letters, digits or hyphens. Changing it breaks links you have shared."
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="submit"
+              name="intent"
+              value="booking-link"
+              disabled={saving}
+            >
+              {saving
+                ? 'Saving…'
+                : slug
+                  ? 'Save link'
+                  : 'Turn on online booking'}
+            </Button>
+            {slug && (
+              <SecondaryButton
+                type="submit"
+                name="intent"
+                value="booking-off"
+                formNoValidate
+                disabled={saving}
+              >
+                Turn off
+              </SecondaryButton>
+            )}
+          </div>
+          <FormMessage result={fetcher.data} />
+        </fetcher.Form>
+      )}
+    </Card>
+  );
+}
+
 export function Organization() {
   const { org, resources, services } =
     useLoaderData<typeof organizationLoader>();
@@ -237,6 +326,10 @@ export function Organization() {
           </Card>
           {isOwner && <AddServiceCard />}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <OnlineBookingCard org={org} />
       </div>
     </Page>
   );

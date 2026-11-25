@@ -88,6 +88,14 @@ describe('api', () => {
     expect(error.message).toBe(message);
   });
 
+  it("keeps the server's error name, so two 429s can be told apart", async () => {
+    vi.stubGlobal('fetch', answer(429, { error: 'Daily limit reached' }));
+
+    const error = await failure(api('/public/x/bookings', { method: 'POST' }));
+    expect(error.message).toBe('Too many requests, wait a few minutes');
+    expect(error.serverError).toBe('Daily limit reached');
+  });
+
   it('says so when the server cannot be reached', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('failed')));
 
