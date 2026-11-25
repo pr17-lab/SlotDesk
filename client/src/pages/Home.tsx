@@ -1,3 +1,4 @@
+import { Building2 } from 'lucide-react';
 import {
   redirect,
   useFetcher,
@@ -35,11 +36,13 @@ export function Home() {
 
   return (
     <Page>
-      <h1 className="text-2xl font-semibold">Your organizations</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">
+        Your organizations
+      </h1>
       <p className="text-muted-foreground mt-1">{`Signed in as ${user.email}.`}</p>
 
       <div className="mt-8 space-y-6">
-        <Card title="Organizations">
+        <Card title="Organizations" icon={Building2}>
           {orgs.length === 0 ? (
             <p className="text-muted-foreground mt-2">
               Welcome. Create your first organization to begin.

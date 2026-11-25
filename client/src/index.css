@@ -2,11 +2,12 @@
 @import 'tw-animate-css';
 /* Served from our own origin; Vite bundles the font file. */
 @import '@fontsource-variable/inter';
+@import '@fontsource-variable/fraunces';
 
 /* shadcn/ui's colour names, with our palette. Screens use these names, not raw colours. */
 :root {
   --radius: 0.5rem;
-  --background: #f3f5f4;
+  --background: #eef2f0;
   --foreground: #16231f;
   --card: #ffffff;
   --card-foreground: #16231f;
@@ -18,7 +19,7 @@
   --secondary-foreground: #16231f;
   --muted: #f3f5f4;
   --muted-foreground: #52635d;
-  --accent: #eaf1ee;
+  --accent: #e3efe9;
   --accent-foreground: #16231f;
   --destructive: #b3261e;
   --border: #d3dbd7;
@@ -33,6 +34,10 @@
   --font-sans:
     'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
+  /* Titles only; everything you read or click stays Inter. */
+  --font-heading: 'Fraunces Variable', Georgia, serif;
+  --shadow-card:
+    0 1px 2px rgb(19 32 28 / 0.06), 0 4px 12px rgb(19 32 28 / 0.05);
   --animate-fade-in: fade-in 0.4s ease-out;
   --animate-loading: loading 1.2s ease-in-out infinite;
   @keyframes loading {
@@ -81,6 +86,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  h1,
+  h2 {
+    font-family: var(--font-heading);
+  }
 }
 
 /* From shadcn/tailwind.css; the combobox list uses it. */

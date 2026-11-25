@@ -1,3 +1,4 @@
+import { Clock } from 'lucide-react';
 import { useMemo, useState, type ComponentProps } from 'react';
 import {
   useFetcher,
@@ -405,7 +406,9 @@ export function Resource() {
           { label: resource.name },
         ]}
       />
-      <h1 className="mt-2 text-2xl font-semibold">{resource.name}</h1>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+        {resource.name}
+      </h1>
       <p className="text-muted-foreground">{resource.timeZone}</p>
 
       <div className="mt-8 space-y-6">
@@ -425,7 +428,7 @@ export function Resource() {
           services={data.services}
           bookings={data.bookings}
         />
-        <Card title="Working hours">
+        <Card title="Working hours" icon={Clock}>
           {canEdit ? (
             <HoursEditor
               key={resource.id}

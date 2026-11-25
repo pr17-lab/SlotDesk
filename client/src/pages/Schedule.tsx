@@ -1,3 +1,4 @@
+import { CalendarDays } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Form, Link, useFetcher, useSubmit } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -140,7 +141,7 @@ export function Schedule({
 
   if (!service) {
     return (
-      <Card title="Schedule">
+      <Card title="Schedule" icon={CalendarDays}>
         <p className="mt-2">
           Add a service on the organization page to start booking.
         </p>
@@ -202,7 +203,7 @@ export function Schedule({
   }
 
   return (
-    <Card title="Schedule">
+    <Card title="Schedule" icon={CalendarDays}>
       <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
         <Form method="get" className="w-full sm:w-auto">
           <input type="hidden" name="from" value={from} />
@@ -299,7 +300,7 @@ export function Schedule({
                       data-day={day}
                       data-new={item.booking.id === newBookingId || undefined}
                       style={cell(dayIndex + 2, rowOf(item), spanOf(item))}
-                      className={`bg-primary/10 border-primary text-foreground rounded-lg border-l-4 px-1 py-1 text-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
+                      className={`bg-primary text-primary-foreground rounded-lg px-1.5 py-1 text-sm shadow-sm ${placed} ${focusStyle} ${item.booking.id === newBookingId ? 'motion-safe:animate-fade-in' : ''}`}
                     >
                       <span aria-hidden="true">
                         <span className="block text-xs font-medium">
@@ -327,7 +328,7 @@ export function Schedule({
                           setChosen(item);
                           setAttempt(attempt + 1);
                         }}
-                        className={`border-primary text-primary bg-card hover:ring-primary focus-visible:ring-primary w-full rounded-lg border px-2 py-1 text-sm font-medium hover:ring-2 focus-visible:ring-2 ${focusStyle}`}
+                        className={`bg-accent text-primary hover:bg-primary hover:text-primary-foreground w-full rounded-lg px-2 py-1 text-sm font-medium transition-colors ${focusStyle}`}
                       >
                         {localTime(item.startsAt, timeZone)}
                       </button>
