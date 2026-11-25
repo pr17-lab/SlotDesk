@@ -3,6 +3,11 @@ import { ErrorPage } from './pages/ErrorPage';
 import { Home, homeAction, homeLoader } from './pages/Home';
 import { NotFound } from './pages/NotFound';
 import {
+  PublicBooking,
+  publicBookingAction,
+  publicBookingLoader,
+} from './pages/PublicBooking';
+import {
   Organization,
   organizationAction,
   organizationLoader,
@@ -14,30 +19,33 @@ import { Page } from './Page';
 import { Card } from './ui';
 import { getSession, redirectIfSignedIn, signOutAction } from './session';
 
+// Shown while the first loader runs; a cold start on Render takes ~30 s.
+function Starting() {
+  return (
+    <Page>
+      <Card title="Starting SlotDesk">
+        <div role="status">
+          <p className="text-muted-foreground mt-2">
+            The server may take up to 30 seconds to wake up on the first visit.
+          </p>
+          <div className="mt-4 space-y-3 motion-safe:animate-pulse">
+            <div className="bg-border h-4 w-3/4 rounded-lg" />
+            <div className="bg-border h-4 w-full rounded-lg" />
+            <div className="bg-border h-4 w-1/2 rounded-lg" />
+          </div>
+        </div>
+      </Card>
+    </Page>
+  );
+}
+
 export const routes: RouteObject[] = [
   {
     id: 'root',
     // Page reads this to show who is signed in.
     loader: getSession,
     ErrorBoundary: ErrorPage,
-    // Shown while the first loader runs; a cold start on Render takes ~30 s.
-    HydrateFallback: () => (
-      <Page>
-        <Card title="Starting SlotDesk">
-          <div role="status">
-            <p className="text-muted-foreground mt-2">
-              The server may take up to 30 seconds to wake up on the first
-              visit.
-            </p>
-            <div className="mt-4 space-y-3 motion-safe:animate-pulse">
-              <div className="bg-border h-4 w-3/4 rounded-lg" />
-              <div className="bg-border h-4 w-full rounded-lg" />
-              <div className="bg-border h-4 w-1/2 rounded-lg" />
-            </div>
-          </div>
-        </Card>
-      </Page>
-    ),
+    HydrateFallback: Starting,
     children: [
       {
         path: '/',
@@ -76,5 +84,15 @@ export const routes: RouteObject[] = [
       },
       { path: '*', Component: NotFound },
     ],
+  },
+  // The customer's booking page sits outside 'root': no session is read, so
+  // the header never shows who is signed in.
+  {
+    path: '/book/:slug',
+    loader: publicBookingLoader,
+    action: publicBookingAction,
+    Component: PublicBooking,
+    ErrorBoundary: ErrorPage,
+    HydrateFallback: Starting,
   },
 ];

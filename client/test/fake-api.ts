@@ -1,6 +1,11 @@
 import { vi } from 'vitest';
 
-export type Org = { id: string; name: string; role: 'owner' | 'staff' };
+export type Org = {
+  id: string;
+  name: string;
+  role: 'owner' | 'staff';
+  bookingSlug?: string | null;
+};
 export type Resource = { id: string; name: string; timeZone: string };
 export type Service = { id: string; name: string; durationMinutes: number };
 export type Window = {
@@ -19,6 +24,7 @@ export type Booking = {
   status: 'confirmed' | 'cancelled';
   customerName: string;
   customerEmail: string;
+  source?: 'staff' | 'public';
   createdAt: string;
 };
 
@@ -29,6 +35,8 @@ type Data = {
   windows: Window[];
   bookings: Booking[];
   slots: Slot[];
+  // What the public page gets for the bot check; null means it is off.
+  turnstileSiteKey: string | null;
 };
 
 const asha = { name: 'Asha', email: 'asha@example.com' };
@@ -43,6 +51,10 @@ export function fakeApi(given: Partial<Data> = {}) {
     windows: given.windows ?? [],
     bookings: given.bookings ?? [],
     slots: given.slots ?? [],
+    turnstileSiteKey:
+      given.turnstileSiteKey === undefined
+        ? 'test-site-key'
+        : given.turnstileSiteKey,
   };
   const calls: { method: string; path: string; body: unknown }[] = [];
   const holds = new Map<string, Promise<void>>();
@@ -68,6 +80,59 @@ export function fakeApi(given: Partial<Data> = {}) {
     if (path === '/api/auth/get-session') {
       return reply(200, { session: {}, user: asha });
     }
+    const publicMatch =
+      /^\/api\/public\/([^/]+)(\/resources\/([^/]+)\/availability|\/bookings)?$/.exec(
+        route,
+      );
+    if (publicMatch) {
+      const org = data.orgs.find(
+        (o) => o.bookingSlug && o.bookingSlug === publicMatch[1].toLowerCase(),
+      );
+      if (!org) return reply(404, { error: 'Not found' });
+      if (!publicMatch[2]) {
+        return reply(200, {
+          name: org.name,
+          resources: data.resources,
+          services: data.services,
+          turnstileSiteKey: data.turnstileSiteKey,
+        });
+      }
+      if (publicMatch[3]) {
+        const resource = data.resources.find((r) => r.id === publicMatch[3]);
+        if (!resource) return reply(404, { error: 'Not found' });
+        return reply(200, { timeZone: resource.timeZone, slots: data.slots });
+      }
+      const service = data.services.find((s) => s.id === body.serviceId);
+      const resource = data.resources.find((r) => r.id === body.resourceId);
+      if (!service || !resource) return reply(404, { error: 'Not found' });
+      const slot = data.slots.find((s) => s.startsAt === body.startsAt);
+      const endsAt =
+        slot?.endsAt ??
+        new Date(
+          Date.parse(body.startsAt) + service.durationMinutes * 60000,
+        ).toISOString();
+      data.bookings.push({
+        id: `b${data.bookings.length + 1}`,
+        resourceId: resource.id,
+        serviceId: service.id,
+        startsAt: body.startsAt,
+        endsAt,
+        status: 'confirmed',
+        customerName: body.customerName,
+        customerEmail: body.customerEmail,
+        source: 'public',
+        createdAt: '2099-01-01T00:00:00.000Z',
+      });
+      data.slots = data.slots.filter((s) => s.startsAt !== body.startsAt);
+      return reply(201, {
+        startsAt: body.startsAt,
+        endsAt,
+        serviceName: service.name,
+        resourceName: resource.name,
+        timeZone: resource.timeZone,
+      });
+    }
+
     if (route === '/api/orgs') {
       if (method === 'GET') return reply(200, data.orgs);
       const org: Org = { id: 'new1', name: body.name, role: 'owner' };
@@ -80,7 +145,16 @@ export function fakeApi(given: Partial<Data> = {}) {
     if (!match || !org) return reply(404, { error: 'Not found' });
     const rest = match[2] ?? '';
 
-    if (rest === '') return reply(200, org);
+    if (rest === '') {
+      if (method === 'PATCH') {
+        // Trimmed and lowercased, like the server.
+        org.bookingSlug =
+          body.bookingSlug === null
+            ? null
+            : body.bookingSlug.trim().toLowerCase();
+      }
+      return reply(200, { bookingSlug: null, ...org });
+    }
     if (rest === '/resources') {
       if (method === 'GET') return reply(200, data.resources);
       const resource = { id: `r${data.resources.length + 1}`, ...body };
@@ -131,6 +205,7 @@ export function fakeApi(given: Partial<Data> = {}) {
         status: 'confirmed',
         customerName: body.customerName,
         customerEmail: body.customerEmail,
+        source: 'staff',
         createdAt: '2099-01-01T00:00:00.000Z',
       };
       data.bookings.push(booking);
