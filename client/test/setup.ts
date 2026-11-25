@@ -7,10 +7,3 @@ afterEach(cleanup);
 // findBy and waitFor give up after 1 s by default, which a busy machine can
 // miss when the whole suite runs at once.
 configure({ asyncUtilTimeout: 5000 });
-
-// jsdom has no ResizeObserver; Headless UI calls it when a combobox closes.
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
