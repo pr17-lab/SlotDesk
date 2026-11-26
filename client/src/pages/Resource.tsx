@@ -162,10 +162,18 @@ async function bookSlot(orgId: string, resourceId: string, form: FormData) {
         customerName: String(form.get('customerName')),
         customerEmail: String(form.get('customerEmail')),
       },
+      headers: { 'Idempotency-Key': `"${String(form.get('idempotencyKey'))}"` },
     });
   } catch (error) {
     if (error instanceof ApiError && error.status === 409) {
       return { error: 'This slot was just taken. Pick another time.' };
+    }
+    // The same key came back with other details: the first try went through.
+    if (error instanceof ApiError && error.status === 422) {
+      return {
+        error:
+          'This booking was already made with the details you first entered. Check the list below.',
+      };
     }
     return errorToData(error);
   }

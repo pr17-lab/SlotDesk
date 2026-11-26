@@ -505,3 +505,47 @@ it('marks bookings made on the public page as Online', async () => {
   expect(within(staffRow).queryByText('Online')).toBeNull();
   expect(within(onlineRow).getByText('Online')).toBeTruthy();
 });
+
+// A quoted v4 UUID, as the IETF draft writes the Idempotency-Key header.
+const quotedUuid =
+  /^"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/;
+
+const keysSent = (api: ReturnType<typeof fakeApi>) =>
+  api
+    .callsTo('POST', bookingsPath)
+    .map((call) => call.headers?.['Idempotency-Key']);
+
+it('sends the same key on every try in a dialog, and a new key in a new dialog', async () => {
+  const api = open({ slots: [nineOClock] });
+  api.failNext('POST', bookingsPath, 503, { error: 'Service Unavailable' });
+
+  const first = await fillAndBook();
+  expect((await within(first).findByRole('alert')).textContent).toBe(
+    'Busy, try again',
+  );
+  api.failNext('POST', bookingsPath, 503, { error: 'Service Unavailable' });
+  await userEvent.click(within(first).getByRole('button', { name: 'Book' }));
+  await waitFor(() => expect(keysSent(api)).toHaveLength(2));
+  await userEvent.click(within(first).getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  await fillAndBook();
+  expect(await screen.findByText('Booking confirmed')).toBeTruthy();
+
+  const [key1, key2, key3] = keysSent(api);
+  expect(key1).toMatch(quotedUuid);
+  expect(key2).toBe(key1);
+  expect(key3).toMatch(quotedUuid);
+  expect(key3).not.toBe(key1);
+});
+
+it('says the booking already went through for a 422', async () => {
+  const api = open({ slots: [nineOClock] });
+  api.failNext('POST', bookingsPath, 422, { error: 'Idempotency key reused' });
+
+  const dialog = await fillAndBook();
+
+  expect((await within(dialog).findByRole('alert')).textContent).toBe(
+    'This booking was already made with the details you first entered. Check the list below.',
+  );
+});

@@ -31,8 +31,9 @@ const BOOKING_COLUMNS = `id, resource_id AS "resourceId", service_id AS "service
 
 // The route answers each failure differently: 404 for a resource or service
 // not in this organization, 400 for a start that isn't offered, 429 when the
-// room's online bookings for the day are used up. The names come back so the
-// public page can confirm what was booked.
+// room's online bookings for the day are used up, 422 when a key comes back
+// with different details. The names come back so the public page can
+// confirm what was booked.
 export type CreateBookingResult =
   | {
       status: 'created';
@@ -43,7 +44,8 @@ export type CreateBookingResult =
     }
   | { status: 'notFound' }
   | { status: 'notOffered' }
-  | { status: 'capReached' };
+  | { status: 'capReached' }
+  | { status: 'keyReused' };
 
 // Extra rules for a booking from the public page: it must start before
 // latestStart, and the room takes at most dailyCap online bookings created
@@ -52,6 +54,13 @@ export type OnlineRules = { latestStart: Date; dailyCap: number };
 
 // Books one guest into one slot in a single transaction: lock the resource
 // row, read the service and working hours, check the start, insert (D-012).
+//
+// With an idempotency key, a booking already made with that key is answered
+// again instead of booking twice. The lookup comes right after the lock:
+// copies of one request name the same room, so the second waits for the
+// first to commit and then finds its booking. It comes before every other
+// check, so a repeat still gets its booking once the start has passed or the
+// day's cap is used up, and never counts towards the cap again.
 //
 // The lock doesn't decide who wins; the bookings_no_overlap constraint does.
 // An overlap makes the INSERT fail with 23P01, which becomes a 409. The lock
@@ -71,6 +80,7 @@ export async function createBooking(
     startsAt: string;
     customerName: string;
     customerEmail: string;
+    idempotencyKey?: string;
   },
   now: Date,
   online?: OnlineRules,
@@ -84,6 +94,29 @@ export async function createBooking(
     if (resource.rowCount === 0) {
       // Nothing was written, so committing here is harmless.
       return { status: 'notFound' };
+    }
+
+    if (request.idempotencyKey !== undefined) {
+      const earlier = await client.query<Booking & { serviceName: string }>(
+        `SELECT ${BOOKING_COLUMNS},
+           (SELECT name FROM services
+            WHERE org_id = bookings.org_id AND id = bookings.service_id) AS "serviceName"
+         FROM bookings WHERE org_id = $1 AND idempotency_key = $2`,
+        [orgId, request.idempotencyKey],
+      );
+      if (earlier.rowCount !== 0) {
+        const { serviceName, ...booking } = earlier.rows[0];
+        if (!sameRequest(booking, request, online === undefined)) {
+          return { status: 'keyReused' };
+        }
+        return {
+          status: 'created',
+          booking,
+          resourceName: resource.rows[0].name,
+          serviceName,
+          timeZone: resource.rows[0].timeZone,
+        };
+      }
     }
     const service = await client.query<{
       name: string;
@@ -135,8 +168,8 @@ export async function createBooking(
     // start plus the service's duration.
     const inserted = await client.query<Booking>(
       `INSERT INTO bookings
-         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email, source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email, source, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${BOOKING_COLUMNS}`,
       [
         orgId,
@@ -147,6 +180,7 @@ export async function createBooking(
         request.customerName,
         request.customerEmail,
         online === undefined ? 'staff' : 'public',
+        request.idempotencyKey ?? null,
       ],
     );
     return {
@@ -157,6 +191,29 @@ export async function createBooking(
       timeZone: resource.rows[0].timeZone,
     };
   });
+}
+
+// True if a repeat asks for exactly the booking that was made with its key.
+// The start is compared as an instant, so +05:30 and Z spellings match.
+function sameRequest(
+  booking: Booking,
+  request: {
+    resourceId: string;
+    serviceId: string;
+    startsAt: string;
+    customerName: string;
+    customerEmail: string;
+  },
+  byStaff: boolean,
+): boolean {
+  return (
+    booking.resourceId === request.resourceId &&
+    booking.serviceId === request.serviceId &&
+    booking.startsAt.getTime() === Date.parse(request.startsAt) &&
+    booking.customerName === request.customerName &&
+    booking.customerEmail === request.customerEmail &&
+    booking.source === (byStaff ? 'staff' : 'public')
+  );
 }
 
 // The confirmed bookings that overlap [start, end), for the availability

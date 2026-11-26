@@ -11,7 +11,13 @@ import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
 import { verifyTurnstile } from '../turnstile.js';
 import { availabilityQuerySchema, findFreeTimes } from './availability.js';
-import { createBookingSchema, sendNotOffered } from './bookings.js';
+import {
+  createBookingSchema,
+  readIdempotencyKey,
+  sendBadIdempotencyKey,
+  sendKeyReused,
+  sendNotOffered,
+} from './bookings.js';
 
 // The public booking page's API: no session, and the business comes from the
 // link, never from a membership. Mounted on its own in app.ts, so no staff
@@ -152,12 +158,19 @@ businessRouter.post(
       res.status(503).json({ error: 'Online booking is not set up' });
       return;
     }
-    // Checked first, so a bad body never spends a bot check.
+    // Checked first, so a bad body or key never spends a bot check.
     const parsed = publicBookingSchema.safeParse(req.body);
     if (!parsed.success) {
       sendValidationError(res, parsed.error);
       return;
     }
+    const idempotencyKey = readIdempotencyKey(req);
+    if (idempotencyKey === null) {
+      sendBadIdempotencyKey(res);
+      return;
+    }
+    // A repeat with a known key still needs a passing check: the page draws
+    // a fresh one after every send anyway.
     const { turnstileToken, ...booking } = parsed.data;
     const check = await verifyTurnstile(
       config.turnstile.secretKey,
@@ -181,10 +194,15 @@ businessRouter.post(
       return;
     }
     const now = new Date();
-    const result = await createBooking(res.locals.publicOrg.id, booking, now, {
-      latestStart: latestStart(now),
-      dailyCap: config.publicDailyBookingCap,
-    });
+    const result = await createBooking(
+      res.locals.publicOrg.id,
+      { ...booking, idempotencyKey },
+      now,
+      {
+        latestStart: latestStart(now),
+        dailyCap: config.publicDailyBookingCap,
+      },
+    );
     if (result.status === 'notFound') {
       notFoundHandler(req, res);
       return;
@@ -195,6 +213,10 @@ businessRouter.post(
     }
     if (result.status === 'capReached') {
       res.status(429).json({ error: 'Daily limit reached' });
+      return;
+    }
+    if (result.status === 'keyReused') {
+      sendKeyReused(res);
       return;
     }
     res.status(201).json({

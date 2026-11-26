@@ -55,6 +55,30 @@ const listBookingsQuerySchema = withDateRangeRules(
   }),
 );
 
+// The Idempotency-Key header, written as the IETF draft writes it: one
+// quoted string. Ours must be a UUID. undefined means no header, which is
+// fine; null means a header we can't use.
+export function readIdempotencyKey(req: Request): string | undefined | null {
+  const header = req.get('Idempotency-Key');
+  if (header === undefined) return undefined;
+  const inside = /^"(.*)"$/.exec(header)?.[1];
+  return inside !== undefined && z.uuid().safeParse(inside).success
+    ? inside
+    : null;
+}
+
+export function sendBadIdempotencyKey(res: Response): void {
+  res.status(400).json({
+    error: 'Bad Request',
+    details: [{ path: 'Idempotency-Key', message: 'Must be a quoted UUID' }],
+  });
+}
+
+// The key was used for a booking with other details. We don't say which.
+export function sendKeyReused(res: Response): void {
+  res.status(422).json({ error: 'Idempotency key reused' });
+}
+
 // Shaped like a validation error, with its own message so a client can tell
 // it apart from a malformed start.
 export function sendNotOffered(res: Response): void {
@@ -75,9 +99,14 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     sendValidationError(res, parsed.error);
     return;
   }
+  const idempotencyKey = readIdempotencyKey(req);
+  if (idempotencyKey === null) {
+    sendBadIdempotencyKey(res);
+    return;
+  }
   const result = await createBooking(
     res.locals.membership.orgId,
-    parsed.data,
+    { ...parsed.data, idempotencyKey },
     new Date(),
   );
   if (result.status === 'notFound') {
@@ -92,6 +121,10 @@ bookingsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   if (result.status === 'capReached') {
     // The cap is only for online bookings, which never come through here.
     throw new Error('Daily cap applied to a staff booking');
+  }
+  if (result.status === 'keyReused') {
+    sendKeyReused(res);
+    return;
   }
   res.status(201).json(result.booking);
 });
