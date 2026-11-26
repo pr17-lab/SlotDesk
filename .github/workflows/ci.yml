@@ -158,6 +158,9 @@ jobs:
       NODE_ENV: test
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/slotdesk
       BETTER_AUTH_URL: http://localhost:3000
+      # Cloudflare's published Turnstile test keys (always pass), not secrets.
+      TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+      TURNSTILE_SECRET_KEY: 1x0000000000000000000000000000000AA
 
     steps:
       - uses: actions/checkout@v7

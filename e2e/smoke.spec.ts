@@ -1,30 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 test('staff can sign up, add sample data and book a slot', async ({ page }) => {
-  // A new account each run, so the test never depends on old data.
-  const email = `smoke-${Date.now()}@example.com`;
-
-  await page.goto('/sign-up');
-  await page.getByLabel('Name').fill('Smoke Test');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('a long smoke test password');
-  await page.getByRole('button', { name: 'Create account' }).click();
-
-  // Sign-up has a Name field too, so wait for the home page before typing.
-  await expect(
-    page.getByRole('heading', { name: 'Your organizations' }),
-  ).toBeVisible();
-  await page.getByLabel('Name').fill('Smoke Clinic');
-  await page.getByRole('button', { name: 'Create organization' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Smoke Clinic' }),
-  ).toBeVisible();
-
-  // Sample data opens the new room's schedule.
-  await page.getByRole('button', { name: 'Create sample data' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Consultation room' }),
-  ).toBeVisible();
+  await signUpWithOrganization(page);
+  await createSampleData(page);
 
   // The first free slot shown, so the test works on any day and at any hour.
   await page
@@ -42,6 +20,52 @@ test('staff can sign up, add sample data and book a slot', async ({ page }) => {
   ).toBeVisible();
 });
 
+// Uses Cloudflare's test keys (set in CI), so the real widget always passes.
+test('a customer can book online and staff see it', async ({
+  page,
+  browser,
+}) => {
+  await signUpWithOrganization(page);
+  const link = `smoke-${Date.now()}`;
+  await page.getByLabel('Link name').fill(link);
+  await page.getByRole('button', { name: 'Turn on online booking' }).click();
+  await expect(page.getByText('Online booking is on')).toBeVisible();
+  await createSampleData(page);
+
+  // A customer, signed out, in a separate browser window.
+  const customer = await browser.newContext();
+  const shop = await customer.newPage();
+  await shop.goto(`/book/${link}`);
+  await expect(
+    shop.getByRole('heading', { name: 'Smoke Clinic' }),
+  ).toBeVisible();
+  await shop
+    .getByRole('button', { name: /^Book \d/ })
+    .first()
+    .click();
+  const dialog = shop.getByRole('dialog');
+  await dialog.getByLabel('Your name').fill('Pat Lee');
+  await dialog.getByLabel('Your email').fill('pat@example.com');
+
+  // The widget takes a moment to pass. Until it does, the page only says
+  // "Please complete the check first" and sends nothing, so click again.
+  const booked = shop.getByRole('heading', { name: "You're booked" });
+  await expect(async () => {
+    if (await booked.isVisible()) return;
+    await dialog
+      .getByRole('button', { name: 'Book', exact: true })
+      .click({ timeout: 1000 });
+    await expect(booked).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 15_000 });
+  await customer.close();
+
+  // Staff see the booking, marked as made online.
+  await page.reload();
+  const row = page.getByRole('listitem').filter({ hasText: 'pat@example.com' });
+  await expect(row.getByText('Online', { exact: true })).toBeVisible();
+  await expect(row.getByText('Confirmed', { exact: true })).toBeVisible();
+});
+
 // The page has no dark theme, so a device in dark mode must see the same
 // colours. This would have caught the bug fixed in PR #47.
 test('dark mode looks the same as light mode', async ({ page }) => {
@@ -56,6 +80,36 @@ test('dark mode looks the same as light mode', async ({ page }) => {
   expect(light.length).toBeGreaterThan(0);
   expect(dark).toEqual(light);
 });
+
+// A new account each run, so the test never depends on old data. Ends on the
+// new organization's page.
+async function signUpWithOrganization(page: Page) {
+  const email = `smoke-${Date.now()}@example.com`;
+
+  await page.goto('/sign-up');
+  await page.getByLabel('Name').fill('Smoke Test');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill('a long smoke test password');
+  await page.getByRole('button', { name: 'Create account' }).click();
+
+  // Sign-up has a Name field too, so wait for the home page before typing.
+  await expect(
+    page.getByRole('heading', { name: 'Your organizations' }),
+  ).toBeVisible();
+  await page.getByLabel('Name').fill('Smoke Clinic');
+  await page.getByRole('button', { name: 'Create organization' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Smoke Clinic' }),
+  ).toBeVisible();
+}
+
+// Sample data opens the new room's schedule.
+async function createSampleData(page: Page) {
+  await page.getByRole('button', { name: 'Create sample data' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Consultation room' }),
+  ).toBeVisible();
+}
 
 function readColours(page: Page) {
   return page.locator('body, input, button, a').evaluateAll((elements) =>

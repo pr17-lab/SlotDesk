@@ -179,7 +179,7 @@ npm run test:db
 - `npm test` runs the unit tests and needs no database. In `client`, they are Testing Library tests against a fake API.
 - `npm run test:db` runs the database tests against `slotdesk_test`. It deletes and re-creates the tables in that database on every run and refuses to run against any database whose name does not end in `_test`. The booking race tests (30 database connections, and 10 simultaneous HTTP requests) are part of it. Some tests kill database connections on purpose, so error lines in its output (for example `Idle database client error`) are expected; what matters is the final summary.
 
-The browser smoke test in `e2e` runs the built client and server against a real database in Chromium: it signs up, adds sample data and books a slot, and checks that the sign-in page looks the same in light and dark mode. To run it, build `client` and `server`, run `npm run migrate:up` in `server`, and set `BETTER_AUTH_URL=http://localhost:3000` in `server\.env`. Then, from the `e2e` folder:
+The browser smoke test in `e2e` runs the built client and server against a real database in Chromium: it signs up, adds sample data and books a slot, books online as a signed-out customer and sees it in the staff list, and checks that the sign-in page looks the same in light and dark mode. To run it, build `client` and `server`, run `npm run migrate:up` in `server`, and set `BETTER_AUTH_URL=http://localhost:3000` and Cloudflare's test keys `TURNSTILE_SITE_KEY=1x00000000000000000000AA` and `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA` in `server\.env`. Then, from the `e2e` folder:
 
 ```powershell
 npm ci
