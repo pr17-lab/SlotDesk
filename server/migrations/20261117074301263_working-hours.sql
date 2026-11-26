@@ -1,7 +1,7 @@
 -- Up Migration
 -- A resource's weekly opening windows (D-032). Times are minutes since local
 -- midnight in the resource's own time zone (540 is 09:00, 1440 is the end of
--- the day). Step 9d converts them to UTC. Several windows per day are allowed
+-- the day). The availability code converts them to UTC. Several windows per day are allowed
 -- (for example a lunch break). Out of scope: overnight windows, holidays and
 -- time off, buffers.
 -- No ON DELETE CASCADE (D-026).

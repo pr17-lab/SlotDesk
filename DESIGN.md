@@ -6,13 +6,13 @@ Comments in the code refer to decisions by ID (for example `D-012`). The decisio
 
 | Section | Decisions |
 |---|---|
-| [1. Request path](#1-request-path) | D-011, D-030 |
+| [1. Request path](#1-request-path) | D-011, D-019, D-030 |
 | [2. Tenant isolation](#2-tenant-isolation) | D-011, D-030 |
-| [3. No double booking](#3-no-double-booking) | D-012, D-026 |
+| [3. No double booking](#3-no-double-booking) | D-012, D-026, D-033 |
 | [4. Data model and database access](#4-data-model-and-database-access) | D-014, D-021, D-025, D-026, D-032 |
 | [5. Authentication](#5-authentication) | D-001, D-029, D-031 |
 | [6. Configuration and deployment](#6-configuration-and-deployment) | D-022, D-031 |
-| [7. Testing](#7-testing) | D-016 |
+| [7. Testing](#7-testing) | D-016, D-027 |
 | [8. Known limits](#8-known-limits) | |
 
 ## 1. Request path
@@ -60,7 +60,7 @@ The weak point is stated plainly: composite foreign keys stop cross-tenant refer
 
 ## 3. No double booking
 
-*Decisions D-012 and D-026.*
+*Decisions D-012, D-026 and D-033.*
 
 Two people booking the same slot at the same moment is the classic race. An application-level "is it free?" check is not safe, because both requests can see "free" before either writes.
 
@@ -137,7 +137,7 @@ Better Auth was adopted provisionally, then confirmed once the React client exis
 
 ## 7. Testing
 
-*Decision D-016.*
+*Decisions D-016 and D-027.*
 
 | Command | What it covers |
 |---|---|

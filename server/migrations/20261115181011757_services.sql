@@ -1,8 +1,8 @@
 -- Up Migration
 -- A service an organization offers, with a fixed duration (D-032).
 -- Every resource offers every service in the MVP, so there is no link table.
--- No ON DELETE CASCADE (D-026), and no route deletes services: Week 3
--- bookings will probably refer to them.
+-- No ON DELETE CASCADE (D-026), and no route deletes services, because
+-- bookings refer to them.
 CREATE TABLE services (
   id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   org_id           bigint NOT NULL CONSTRAINT services_org_id_fkey REFERENCES organizations (id),
