@@ -56,7 +56,12 @@ export function fakeApi(given: Partial<Data> = {}) {
         ? 'test-site-key'
         : given.turnstileSiteKey,
   };
-  const calls: { method: string; path: string; body: unknown }[] = [];
+  const calls: {
+    method: string;
+    path: string;
+    body: unknown;
+    headers?: Record<string, string>;
+  }[] = [];
   const holds = new Map<string, Promise<void>>();
   const failures = new Map<string, { status: number; body: unknown }>();
   const reply = (status: number, body: unknown) =>
@@ -66,7 +71,8 @@ export function fakeApi(given: Partial<Data> = {}) {
     const method = init?.method ?? 'GET';
     const body =
       typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
-    calls.push({ method, path, body });
+    const headers = init?.headers as Record<string, string> | undefined;
+    calls.push({ method, path, body, headers });
     // Routes and holds ignore the query string; `calls` keeps it.
     const route = path.split('?')[0];
     await holds.get(`${method} ${route}`);

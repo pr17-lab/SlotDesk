@@ -372,3 +372,60 @@ it('keeps a strange link inside the public API', async () => {
   await screen.findByRole('region', { name: "Online booking isn't available" });
   expect(api.calls.map((call) => call.path)).toEqual(['/api/public/..%2Forgs']);
 });
+
+// A quoted v4 UUID, as the IETF draft writes the Idempotency-Key header.
+const quotedUuid =
+  /^"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/;
+
+it('sends the same key on every try in a dialog, and a new key in a new dialog', async () => {
+  const check = fakeTurnstile();
+  const api = open();
+  const bookingsPath = '/api/public/sunrise-physio/bookings';
+  api.failNext('POST', bookingsPath, 503, { error: 'Service Unavailable' });
+
+  await chooseNine();
+  await fillIn();
+  check.pass('token-1');
+  await userEvent.click(dialog().getByRole('button', { name: 'Book' }));
+  await dialog().findByRole('alert');
+  await waitFor(() => expect(check.widgets).toHaveLength(2));
+  api.failNext('POST', bookingsPath, 503, { error: 'Service Unavailable' });
+  check.pass('token-2');
+  await userEvent.click(dialog().getByRole('button', { name: 'Book' }));
+  await waitFor(() => expect(posts(api)).toHaveLength(2));
+  await userEvent.click(dialog().getByRole('button', { name: 'Close' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  await chooseNine();
+  await fillIn();
+  check.pass('token-3');
+  await userEvent.click(dialog().getByRole('button', { name: 'Book' }));
+  expect(
+    await screen.findByRole('region', { name: "You're booked" }),
+  ).toBeTruthy();
+
+  const [key1, key2, key3] = posts(api).map(
+    (call) => call.headers?.['Idempotency-Key'],
+  );
+  expect(key1).toMatch(quotedUuid);
+  expect(key2).toBe(key1);
+  expect(key3).toMatch(quotedUuid);
+  expect(key3).not.toBe(key1);
+});
+
+it('says the booking already went through for a 422', async () => {
+  const check = fakeTurnstile();
+  const api = open();
+  api.failNext('POST', '/api/public/sunrise-physio/bookings', 422, {
+    error: 'Idempotency key reused',
+  });
+
+  await chooseNine();
+  await fillIn();
+  check.pass('token-1');
+  await userEvent.click(dialog().getByRole('button', { name: 'Book' }));
+
+  expect((await dialog().findByRole('alert')).textContent).toBe(
+    'Your booking already went through with the details you first entered. If something is wrong, contact the business.',
+  );
+});

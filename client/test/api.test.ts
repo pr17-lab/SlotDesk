@@ -41,6 +41,25 @@ describe('api', () => {
     });
   });
 
+  it('sends extra headers alongside the JSON content type', async () => {
+    const fetch = answer(201, { id: '1' });
+    vi.stubGlobal('fetch', fetch);
+
+    await api('/orgs/1/bookings', {
+      method: 'POST',
+      body: { name: 'Clinic' },
+      headers: { 'Idempotency-Key': '"abc"' },
+    });
+    expect(fetch).toHaveBeenCalledWith('/api/orgs/1/bookings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': '"abc"',
+      },
+      body: '{"name":"Clinic"}',
+    });
+  });
+
   it('returns null for a null body, as get-session sends when signed out', async () => {
     vi.stubGlobal('fetch', answer(200, null));
     expect(await api('/auth/get-session')).toBeNull();

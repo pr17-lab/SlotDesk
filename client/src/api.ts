@@ -30,15 +30,23 @@ const messages: Record<number, string> = {
   503: 'Busy, try again',
 };
 
-type Options = { method?: string; body?: unknown };
+type Options = {
+  method?: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+};
 
 export async function api<T>(path: string, options: Options = {}): Promise<T> {
   const hasBody = options.body !== undefined;
+  const headers = {
+    ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    ...options.headers,
+  };
   let res: Response;
   try {
     res = await fetch('/api' + path, {
       method: options.method,
-      headers: hasBody ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
       body: hasBody ? JSON.stringify(options.body) : undefined,
     });
   } catch {

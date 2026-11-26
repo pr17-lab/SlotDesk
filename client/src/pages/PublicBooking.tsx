@@ -132,6 +132,9 @@ function bookingError(error: unknown) {
   if (error.status === 409) {
     return 'This time is no longer free. If you just booked it, your booking went through.';
   }
+  if (error.status === 422) {
+    return 'Your booking already went through with the details you first entered. If something is wrong, contact the business.';
+  }
   if (error.status === 429 && error.serverError === 'Daily limit reached') {
     return 'Online booking is paused for today. Please contact the business.';
   }
@@ -163,6 +166,7 @@ export async function publicBookingAction({
         customerEmail: String(form.get('customerEmail')),
         turnstileToken,
       },
+      headers: { 'Idempotency-Key': `"${String(form.get('idempotencyKey'))}"` },
     });
     return { booked: { ...booked, customerName } };
   } catch (error) {
@@ -240,7 +244,10 @@ function BookDialog({
   onClose: () => void;
 }) {
   const [token, setToken] = useState('');
-  // A new key draws a new widget.
+  // One key for every try in this dialog, so a retry after a lost answer
+  // gets the same booking back instead of a 409.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  // A new React key draws a new widget.
   const [check, setCheck] = useState(0);
   const booking = fetcher.state !== 'idle';
   const { timeZone } = resource;
@@ -267,6 +274,7 @@ function BookDialog({
         {`${service.name} · ${service.durationMinutes} min${showWith ? ` · With ${resource.name}` : ''}`}
       </p>
       <form onSubmit={send} className="mt-4 space-y-4">
+        <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
         <input type="hidden" name="resourceId" value={resource.id} />
         <input type="hidden" name="serviceId" value={service.id} />
         <input type="hidden" name="startsAt" value={slot.startsAt} />

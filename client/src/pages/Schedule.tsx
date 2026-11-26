@@ -56,6 +56,9 @@ function BookDialog({
 }) {
   const booking = fetcher.state !== 'idle';
   const date = localDate(slot.startsAt, timeZone);
+  // One key for every try in this dialog, so a retry after a lost answer
+  // gets the same booking back instead of a 409.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   return (
     <Modal
@@ -67,6 +70,7 @@ function BookDialog({
       </p>
       <fetcher.Form method="post" className="mt-4 space-y-4">
         <input type="hidden" name="intent" value="book" />
+        <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
         <input type="hidden" name="startsAt" value={slot.startsAt} />
         <input type="hidden" name="serviceId" value={service.id} />
         <TextField
