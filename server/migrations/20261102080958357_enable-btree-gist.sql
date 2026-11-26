@@ -1,5 +1,5 @@
 -- Up Migration
--- Step 3's exclusion constraint combines equality on a resource id (bigint)
+-- The bookings table's exclusion constraint combines equality on a resource id (bigint)
 -- with a time-range overlap (tstzrange). PostgreSQL's default GiST operator
 -- class only handles geometric types; btree_gist adds a GiST operator class
 -- for plain scalar types (like integer), making the mixed exclusion constraint

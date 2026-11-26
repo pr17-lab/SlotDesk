@@ -1,5 +1,5 @@
 -- Up Migration
--- The service each booking is for (Step 10b, D-033). The booking route reads
+-- The service each booking is for (D-033). The booking route reads
 -- the service's duration to set ends_at; the row records what was booked.
 -- NOT NULL with no default: this fails on a table that already has rows,
 -- which is intended (no booking has a service to fill in). The composite
