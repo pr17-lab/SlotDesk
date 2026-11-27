@@ -83,6 +83,20 @@ export type Org = {
   // The public booking page's link name; null while the page is off.
   bookingSlug: string | null;
 };
+export type Member = {
+  userId: string;
+  name: string;
+  email: string;
+  role: 'owner' | 'staff';
+};
+// A pending invite link, as the owner's list shows it. The secret is only in
+// the answer to creating one.
+export type Invitation = {
+  id: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string;
+};
 export type Service = { id: string; name: string; durationMinutes: number };
 export type Slot = { startsAt: string; endsAt: string };
 

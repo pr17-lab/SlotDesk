@@ -13,6 +13,7 @@ This is a work in progress. What exists and is tested today:
 
 - Sign-up, sign-in and sessions (email and password, using Better Auth).
 - Organizations and members, with an owner and staff role, and a tenant check on every organization route.
+- Staff join through a one-time invite link the owner sends them (24 hours, at most 20 waiting); they accept or decline it, and only a hash of the link's secret is stored. Nobody is added by email.
 - Resources (create, list, view, rename), with time zones checked.
 - Services (create, list, view, update), each with a duration of 5 to 480 minutes.
 - Working hours per resource (a weekly timetable in the resource's time zone, replaced as a whole week).
@@ -29,7 +30,7 @@ The React client has:
 - An organization page with its resources and services. The owner can add both, and while the organization is empty, create sample data in one click.
 - A resource page with a 7-day schedule (pick a service, click a free slot, book a guest), the list of bookings with a cancel button, and the working hours (the owner can edit them; staff can read them).
 
-Members are managed through the API only; there is no members screen. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
+On the organization page the owner also sees the Staff card: the members, a way to remove staff, and one-time invite links (24 hours) to send to someone who should join as staff. The person opens the link, signs in and accepts or declines. See [DESIGN.md](DESIGN.md) for how the pieces fit and why.
 
 **Live app:** `https://slotdesk-wfgi.onrender.com` (the API health check is `/api/health`). It runs on a free instance that sleeps after 15 minutes without requests, so the first request can take about 30 seconds.
 
@@ -49,8 +50,13 @@ Every route is under `/api`. IDs are strings in JSON.
 | `GET /api/orgs` | signed in | List your organizations and your role in each |
 | `GET /api/orgs/:orgId` | members | `{ id, name, role }` |
 | `GET /api/orgs/:orgId/members` | members | List members |
-| `POST /api/orgs/:orgId/members` | owner | Add an existing user by email as staff (201; 404 unknown email; 409 already a member) |
 | `DELETE /api/orgs/:orgId/members/:userId` | owner | Remove a staff member (204; 409 for the owner) |
+| `POST /api/orgs/:orgId/invitations` | owner | Make a one-time invite link from `{ label }` (1 to 100 characters, only for the owner's list): 201 with `{ id, label, createdAt, expiresAt, token }`. The `token` is sent only here; the link is `/invite#<token>` and works once, for 24 hours. 409 when 20 are already waiting |
+| `GET /api/orgs/:orgId/invitations` | owner | Waiting invites, newest first, without their tokens |
+| `DELETE /api/orgs/:orgId/invitations/:id` | owner | Cancel an invite (204; 404 if not found) |
+| `POST /api/invitations/lookup` | signed in | `{ token }` → `{ orgName, expiresAt }`. Any link that is unknown, expired, cancelled, used or malformed gets the same 404 |
+| `POST /api/invitations/accept` | signed in | `{ token }` → join as staff: `{ orgId, orgName, role }` (404 as above; 409 if already a member, and the invite stays) |
+| `POST /api/invitations/decline` | signed in | `{ token }` → 204; the invite is used up (404 as above) |
 | `GET /api/orgs/:orgId/resources` | members | List the organization's resources |
 | `POST /api/orgs/:orgId/resources` | owner | Create a resource from `{ name, timeZone }` (201; 400 for a bad name or an invalid IANA time zone such as `Mars/Base` or `+05:30`) |
 | `GET /api/orgs/:orgId/resources/:resourceId` | members | `{ id, name, timeZone }` (404 if not found) |
@@ -230,7 +236,7 @@ server/
     config.ts              environment settings checked with Zod
     db.ts                  the PostgreSQL connection pool
     middleware/            origin, session, membership and role checks; errors
-    routes/                health, organizations, members, resources, services, working hours, availability, bookings
+    routes/                health, organizations, members, invitations, resources, services, working hours, availability, bookings
     data/                  the SQL (one file per kind of data)
   migrations/              SQL migration files
   scripts/audit-check.ts   the CI dependency audit, with exceptions in audit-exceptions.json

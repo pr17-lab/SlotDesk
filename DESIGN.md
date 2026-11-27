@@ -28,7 +28,8 @@ flowchart TD
   E --> F["Routes under /api"]
   F --> G["/api/orgs: rate limits, origin check, session check"]
   G --> H["/api/orgs/:orgId: membership check"]
-  H --> I["/members: owner-only check on changes"]
+  H --> I["/members and /invitations: owner-only check on changes"]
+  F --> M["/api/invitations: rate limits, origin check, session check"]
   F --> L["Built React app, if present: its files, then index.html for any other GET outside /api"]
   L --> J["404 handler"]
   J --> K["Error handler"]
@@ -52,7 +53,9 @@ SlotDesk uses one shared database schema for all organizations. Isolation is enf
 
 The weak point is stated plainly: composite foreign keys stop cross-tenant references, but they do not stop a query that forgets its `org_id` filter. Layers 3 and 5 exist for that reason. Row-level security was considered and left out of the first version.
 
-**Roles.** An organization has one owner and any number of staff. The database allows at most one owner per organization (a partial unique index). Only the owner can add or remove members, and create or rename resources; the owner also creates and updates services and sets working hours; staff get 403 on those and can only read resources, services and working hours. An organization and its owner membership are created in one transaction.
+**Roles.** An organization has one owner and any number of staff. The database allows at most one owner per organization (a partial unique index). Only the owner can invite or remove members, and create or rename resources; the owner also creates and updates services and sets working hours; staff get 403 on those and can only read resources, services and working hours. An organization and its owner membership are created in one transaction.
+
+**Joining as staff.** Nobody is added by email. The owner makes a one-time invite link, `/invite#<secret>`, and sends it themselves; whoever opens it, signs in and accepts becomes staff. The secret is 32 random bytes, and only its SHA-256 is stored; it sits after the `#`, so the browser never sends it to a server, and the app moves it into the tab's storage and out of the address at once. A link works once, for 24 hours, and an organization can have at most 20 waiting. Accepting deletes the invitation and adds the membership in one transaction, so two people opening one link at the same moment cannot both get in. `/api/invitations` has no membership check, because the person is not a member yet: it finds the organization from the secret, as `/api/public` finds it from the booking link. Every dead link (unknown, expired, cancelled, used or malformed) gets the same 404. We match the invitation to the secret, not to an email, because emails are not verified: anyone could sign up with someone else's address.
 
 **Origin check on our own routes.** Better Auth checks the `Origin` header on its own routes only. Requests that change data under `/api/orgs` need the same protection, so a small middleware requires the `Origin` header to equal the origin of `BETTER_AUTH_URL`, and answers 403 otherwise.
 
@@ -82,7 +85,7 @@ The constraint covers overlaps only. Working hours and similar rules are applica
 
 *Decisions D-014, D-021, D-025, D-026 and D-032.*
 
-**Tables.** `organizations`, `resources`, `services`, `working_hours`, `bookings`, `memberships`, and four identity tables (`users`, `sessions`, `accounts`, `verifications`). Migrations are plain SQL files in `server/migrations/`, each with a real down step.
+**Tables.** `organizations`, `resources`, `services`, `working_hours`, `bookings`, `memberships`, `invitations`, and four identity tables (`users`, `sessions`, `accounts`, `verifications`). Migrations are plain SQL files in `server/migrations/`, each with a real down step.
 
 **Keys and names.**
 
@@ -144,7 +147,7 @@ Better Auth was adopted provisionally, then confirmed once the React client exis
 | Command | What it covers |
 |---|---|
 | `npm test` | Unit tests, including the availability and daylight saving time cases. No database needed. |
-| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races (including copies of one request with the same idempotency key), authentication checks, and the organization, member, resource, service, working-hours, availability and booking routes through the real app. |
+| `npm run test:db` | Database tests against `slotdesk_test`: table rules, booking races (including copies of one request with the same idempotency key), invitation races (two people accepting one link, accept against cancel, two invites at the cap), authentication checks, and the organization, member, invitation, resource, service, working-hours, availability and booking routes through the real app. |
 | `npm test` in `client` | Testing Library tests of the screens, rendering the real routes against a fake API. |
 | `npm test` in `e2e` | A Playwright smoke test in Chromium: the built client and server against a real database. It signs up, adds sample data and books a slot, and checks that the sign-in page looks the same in light and dark mode. |
 
@@ -166,6 +169,7 @@ CI (GitHub Actions) runs a check that no file is stored with Windows line ending
 - Several users behind one address, such as an office or a mobile carrier's shared address, share one count.
 - The free Render instance hashes about one password at a time, so a burst of sign-in attempts from many addresses would slow everyone's sign-in.
 - Two clients hitting the rate limit at the same moment, and any way of reaching the service without going through Cloudflare, have not been tested.
+- Anyone can find out whether an email has an account: sign-up answers "User already exists" for a registered address. Better Auth does this unless email verification is on, and we send no email. Staff join through an invite link that the owner sends them; whoever opens it first and accepts becomes staff, so it should be sent privately. A link works once, for 24 hours, and the owner can cancel it or remove staff at any time.
 - A booking cannot be edited or un-cancelled; cancel it and book again.
 - Availability and booking are members-only for now (staff book for guest customers), and a booking that would run across two touching working-hours windows (for example 09:00 to 13:00 and 13:00 to 17:00) is not offered or accepted.
 - A retry is recognised only inside one booking dialog: closing it and booking the same slot again makes a new key, so that try still gets a 409 for its own booking. A repeat is answered from the booking as it is now, so if staff cancel it in between, a staff repeat shows it as cancelled and the online page still says "You're booked". The same key sent at the same moment for two different resources gets a 409 instead of a 422 (our clients never do this).

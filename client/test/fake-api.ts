@@ -28,6 +28,24 @@ export type Booking = {
   createdAt: string;
 };
 
+export type Member = {
+  userId: string;
+  name: string;
+  email: string;
+  role: 'owner' | 'staff';
+};
+// The secret is kept here so a test can open the link the owner got.
+export type Invitation = {
+  id: string;
+  orgId: string;
+  // For a link to an organization the signed-in user isn't in yet.
+  orgName?: string;
+  label: string;
+  createdAt: string;
+  expiresAt: string;
+  token: string;
+};
+
 type Data = {
   orgs: Org[];
   resources: Resource[];
@@ -35,6 +53,8 @@ type Data = {
   windows: Window[];
   bookings: Booking[];
   slots: Slot[];
+  members: Member[];
+  invitations: Invitation[];
   // What the public page gets for the bot check; null means it is off.
   turnstileSiteKey: string | null;
 };
@@ -51,6 +71,8 @@ export function fakeApi(given: Partial<Data> = {}) {
     windows: given.windows ?? [],
     bookings: given.bookings ?? [],
     slots: given.slots ?? [],
+    members: given.members ?? [],
+    invitations: given.invitations ?? [],
     turnstileSiteKey:
       given.turnstileSiteKey === undefined
         ? 'test-site-key'
@@ -66,6 +88,13 @@ export function fakeApi(given: Partial<Data> = {}) {
   const failures = new Map<string, { status: number; body: unknown }>();
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status });
+  const noContent = () => new Response(null, { status: 204 });
+  const listed = ({ id, label, createdAt, expiresAt }: Invitation) => ({
+    id,
+    label,
+    createdAt,
+    expiresAt,
+  });
 
   const fetch = vi.fn(async (path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
@@ -139,6 +168,25 @@ export function fakeApi(given: Partial<Data> = {}) {
       });
     }
 
+    const inviteMatch = /^\/api\/invitations\/(lookup|accept|decline)$/.exec(
+      route,
+    );
+    if (inviteMatch) {
+      const invitation = data.invitations.find((i) => i.token === body?.token);
+      if (!invitation) return reply(404, { error: 'Not found' });
+      const orgName =
+        invitation.orgName ??
+        data.orgs.find((o) => o.id === invitation.orgId)?.name ??
+        '';
+      if (inviteMatch[1] === 'lookup') {
+        return reply(200, { orgName, expiresAt: invitation.expiresAt });
+      }
+      data.invitations.splice(data.invitations.indexOf(invitation), 1);
+      if (inviteMatch[1] === 'decline') return noContent();
+      data.orgs.push({ id: invitation.orgId, name: orgName, role: 'staff' });
+      return reply(200, { orgId: invitation.orgId, orgName, role: 'staff' });
+    }
+
     if (route === '/api/orgs') {
       if (method === 'GET') return reply(200, data.orgs);
       const org: Org = { id: 'new1', name: body.name, role: 'owner' };
@@ -160,6 +208,39 @@ export function fakeApi(given: Partial<Data> = {}) {
             : body.bookingSlug.trim().toLowerCase();
       }
       return reply(200, { bookingSlug: null, ...org });
+    }
+    if (rest === '/members') return reply(200, data.members);
+    const memberMatch = /^\/members\/([^/]+)$/.exec(rest);
+    if (memberMatch) {
+      const index = data.members.findIndex((m) => m.userId === memberMatch[1]);
+      if (index === -1) return reply(404, { error: 'Not found' });
+      data.members.splice(index, 1);
+      return noContent();
+    }
+    if (rest === '/invitations') {
+      const mine = data.invitations.filter((i) => i.orgId === org.id);
+      // Newest first, like the server.
+      if (method === 'GET') return reply(200, mine.map(listed).reverse());
+      const n = data.invitations.length + 1;
+      const invitation: Invitation = {
+        id: `i${n}`,
+        orgId: org.id,
+        label: body.label,
+        createdAt: '2099-01-01T00:00:00.000Z',
+        expiresAt: '2099-01-02T00:00:00.000Z',
+        token: `secret${n}`.padEnd(43, 'x'),
+      };
+      data.invitations.push(invitation);
+      return reply(201, { ...listed(invitation), token: invitation.token });
+    }
+    const invitationMatch = /^\/invitations\/([^/]+)$/.exec(rest);
+    if (invitationMatch) {
+      const index = data.invitations.findIndex(
+        (i) => i.orgId === org.id && i.id === invitationMatch[1],
+      );
+      if (index === -1) return reply(404, { error: 'Not found' });
+      data.invitations.splice(index, 1);
+      return noContent();
     }
     if (rest === '/resources') {
       if (method === 'GET') return reply(200, data.resources);

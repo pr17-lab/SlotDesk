@@ -1,21 +1,12 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import {
-  addStaffMemberByEmail,
-  listMembers,
-  removeStaffMember,
-} from '../data/memberships.js';
-import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
+import { listMembers, removeStaffMember } from '../data/memberships.js';
+import { notFoundHandler } from '../middleware/errors.js';
 import { requireOwner } from '../middleware/role.js';
 
-// Trim and lowercase first, so '  Alice@Example.COM ' matches the email
-// Better Auth stored.
-const addMemberSchema = z.object({
-  email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
-});
-
-// No mergeParams: the organization comes from res.locals.membership.
+// Nobody is added here: people join through an invite link they accept
+// (invitations.ts). No mergeParams: the organization comes from
+// res.locals.membership.
 export const membersRouter = Router();
 
 membersRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
@@ -23,32 +14,6 @@ membersRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
   const members = await listMembers(res.locals.membership.orgId);
   res.status(200).json(members);
 });
-
-membersRouter.post(
-  '/',
-  requireOwner,
-  async (req: Request, res: Response): Promise<void> => {
-    // safeParse, because a missing body must be a 400, not a 500.
-    const parsed = addMemberSchema.safeParse(req.body);
-    if (!parsed.success) {
-      sendValidationError(res, parsed.error);
-      return;
-    }
-    const outcome = await addStaffMemberByEmail(
-      res.locals.membership.orgId,
-      parsed.data.email,
-    );
-    if (outcome.result === 'unknown-email') {
-      notFoundHandler(req, res);
-      return;
-    }
-    if (outcome.result === 'already-member') {
-      res.status(409).json({ error: 'Conflict' });
-      return;
-    }
-    res.status(201).json(outcome.member);
-  },
-);
 
 membersRouter.delete(
   '/:userId',

@@ -34,52 +34,9 @@ export async function listMembers(orgId: string): Promise<Member[]> {
   return result.rows;
 }
 
-export type AddStaffResult =
-  | { result: 'added'; member: Member }
-  | { result: 'unknown-email' }
-  | { result: 'already-member' };
-
-// No transaction needed: each step is one statement, and the primary key
-// settles a race between two adds.
-export async function addStaffMemberByEmail(
-  orgId: string,
-  email: string,
-): Promise<AddStaffResult> {
-  // No lowercasing here: the route's schema does it, and Better Auth stores
-  // emails lowercased.
-  const user = await pool.query<{ id: string; name: string; email: string }>(
-    'SELECT id, name, email FROM users WHERE email = $1',
-    [email],
-  );
-  const found = user.rows[0];
-  if (found === undefined) {
-    return { result: 'unknown-email' };
-  }
-  try {
-    await pool.query(
-      "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
-      [orgId, found.id],
-    );
-  } catch (err) {
-    if (isDuplicateMembership(err)) {
-      return { result: 'already-member' };
-    }
-    throw err;
-  }
-  return {
-    result: 'added',
-    member: {
-      userId: found.id,
-      name: found.name,
-      email: found.email,
-      role: 'staff',
-    },
-  };
-}
-
 // 23505 is a unique violation. Only the primary key means "already a
 // member"; any other constraint is a real error, so we rethrow it.
-function isDuplicateMembership(err: unknown): boolean {
+export function isDuplicateMembership(err: unknown): boolean {
   return (
     err instanceof pg.DatabaseError &&
     err.code === '23505' &&
