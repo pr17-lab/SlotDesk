@@ -13,6 +13,7 @@ import { requireTrustedOrigin } from '../middleware/origin.js';
 import { requireOwner } from '../middleware/role.js';
 import { requireSession } from '../middleware/session.js';
 import { bookingsRouter } from './bookings.js';
+import { orgInvitationsRouter } from './invitations.js';
 import { membersRouter } from './members.js';
 import { bookingSlugSchema } from './public.js';
 import { resourcesRouter } from './resources.js';
@@ -55,6 +56,7 @@ orgsRouter.get('/', async (_req: Request, res: Response): Promise<void> => {
 const orgRouter = Router({ mergeParams: true });
 orgRouter.use(requireMembership);
 orgRouter.use('/members', membersRouter);
+orgRouter.use('/invitations', orgInvitationsRouter);
 orgRouter.use('/resources', resourcesRouter);
 orgRouter.use('/services', servicesRouter);
 orgRouter.use('/bookings', bookingsRouter);

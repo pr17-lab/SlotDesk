@@ -80,7 +80,7 @@ export async function expectError(
 // file starts clean. Identity sequences restart so IDs are predictable.
 export async function truncateTables(client: pg.Client): Promise<void> {
   await client.query(
-    'TRUNCATE working_hours, memberships, bookings, services, resources, organizations RESTART IDENTITY CASCADE',
+    'TRUNCATE invitations, working_hours, memberships, bookings, services, resources, organizations RESTART IDENTITY CASCADE',
   );
   await client.query(
     'TRUNCATE verifications, accounts, sessions, users RESTART IDENTITY CASCADE',

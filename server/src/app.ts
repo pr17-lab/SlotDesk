@@ -13,6 +13,7 @@ import {
   writeLimiter,
 } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
+import { invitationsRouter } from './routes/invitations.js';
 import { orgsRouter } from './routes/orgs.js';
 import { publicRouter } from './routes/public.js';
 
@@ -39,6 +40,9 @@ app.use('/api', healthRouter);
 // session lookup or any database query. The write limiter goes last so its
 // headers show on writes, where it is the tighter one.
 app.use('/api/orgs', requestLimiter, writeLimiter, orgsRouter);
+// Opening an invite link: signed in, but not a member yet. The same limits
+// and counts as /api/orgs, since the same signed-in people use both.
+app.use('/api/invitations', requestLimiter, writeLimiter, invitationsRouter);
 // The public booking page: no session, its own counts, and bookings limited
 // per hour. Kept apart from /api/orgs so a staff route can't become public.
 app.use(

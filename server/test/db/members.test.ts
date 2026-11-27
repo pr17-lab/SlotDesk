@@ -1,7 +1,8 @@
 // Organization members through the real app on the test database
-// (D-030). Covers the session check (401), the origin check (403), list, add
-// and remove, the owner-only role check (403), the duplicate-add race, and
-// isolation between organizations (404 identical to an unknown route).
+// (D-030). Covers the session check (401), the origin check (403), list and
+// remove, the owner-only role check (403), that no route adds a member by
+// email, and isolation between organizations (404 identical to an unknown
+// route). People join through invite links (invitations.test.ts).
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -55,12 +56,6 @@ async function membershipRole(
   return result.rows[0]?.role;
 }
 
-const addMember = (cookie: string, orgId: string) =>
-  request(app)
-    .post(`/api/orgs/${orgId}/members`)
-    .set('Origin', TRUSTED_ORIGIN)
-    .set('Cookie', cookie);
-
 const removeMember = (cookie: string, orgId: string, userId: string) =>
   request(app)
     .delete(`/api/orgs/${orgId}/members/${encodeURIComponent(userId)}`)
@@ -101,8 +96,8 @@ beforeAll(async () => {
   orgA = await createOrg(app, alice.cookie, 'Members Org A');
   orgB = await createOrg(app, dave.cookie, 'Members Org B');
   await client.query(
-    "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff')",
-    [orgB, erin.id],
+    "INSERT INTO memberships (org_id, user_id, role) VALUES ($1, $2, 'staff'), ($3, $4, 'staff')",
+    [orgB, erin.id, orgA, bob.id],
   );
 });
 
@@ -113,17 +108,13 @@ afterAll(async () => {
 });
 
 describe('401: the session check', () => {
-  it('returns 401 without a cookie on list, add and remove', async () => {
+  it('returns 401 without a cookie on list and remove', async () => {
     const list = await request(app).get(`/api/orgs/${orgA}/members`);
-    const add = await request(app)
-      .post(`/api/orgs/${orgA}/members`)
-      .set('Origin', TRUSTED_ORIGIN)
-      .send({ email: carol.email });
     const remove = await request(app)
       .delete(`/api/orgs/${orgA}/members/${alice.id}`)
       .set('Origin', TRUSTED_ORIGIN);
 
-    for (const res of [list, add, remove]) {
+    for (const res of [list, remove]) {
       expect(res.status).toBe(401);
       expect(res.body).toEqual({ error: 'Unauthorized' });
     }
@@ -137,127 +128,38 @@ describe('403: the origin check', () => {
   ];
 
   for (const [label, origin] of badOrigins) {
-    it(`rejects add and remove with Origin ${label}, leaving memberships unchanged`, async () => {
+    it(`rejects remove with Origin ${label}, leaving memberships unchanged`, async () => {
       const before = await countMemberships(orgA);
 
-      let add = request(app)
-        .post(`/api/orgs/${orgA}/members`)
-        .set('Cookie', alice.cookie);
       let remove = request(app)
         .delete(`/api/orgs/${orgA}/members/${alice.id}`)
         .set('Cookie', alice.cookie);
       if (origin !== undefined) {
-        add = add.set('Origin', origin);
         remove = remove.set('Origin', origin);
       }
 
-      for (const res of [
-        await add.send({ email: carol.email }),
-        await remove,
-      ]) {
-        expect(res.status).toBe(403);
-        expect(res.body).toEqual({ error: 'Forbidden' });
-      }
+      const res = await remove;
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: 'Forbidden' });
       expect(await countMemberships(orgA)).toBe(before);
       expect(await membershipRole(orgA, alice.id)).toBe('owner');
     });
   }
 });
 
-describe('add', () => {
-  it('adds Bob as staff from his email with spaces and capitals', async () => {
-    const res = await addMember(alice.cookie, orgA).send({
-      email: '  ORG-BOB@Example.com ',
-    });
-    expect(res.status).toBe(201);
-    expect(res.body).toEqual({
-      userId: bob.id,
-      name: 'Bob',
-      email: 'org-bob@example.com',
-      role: 'staff',
-    });
-    expect(await membershipRole(orgA, bob.id)).toBe('staff');
-  });
-
-  it('returns 404 for an unknown email and adds no row', async () => {
-    const before = await countMemberships(orgA);
-    const res = await addMember(alice.cookie, orgA).send({
-      email: 'nobody-here@example.com',
-    });
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Not found' });
-    expect(await countMemberships(orgA)).toBe(before);
-  });
-
-  it('returns 409 for Bob again and for Alice adding herself', async () => {
-    const before = await countMemberships(orgA);
-
-    const bobAgain = await addMember(alice.cookie, orgA).send({
-      email: bob.email,
-    });
-    expect(bobAgain.status).toBe(409);
-    expect(bobAgain.body).toEqual({ error: 'Conflict' });
-
-    const self = await addMember(alice.cookie, orgA).send({
-      email: alice.email,
-    });
-    expect(self.status).toBe(409);
-    expect(self.body).toEqual({ error: 'Conflict' });
-
-    expect(await countMemberships(orgA)).toBe(before);
-    expect(await membershipRole(orgA, alice.id)).toBe('owner');
-  });
-
-  it('rejects invalid bodies with 400 and adds no row', async () => {
-    const before = await countMemberships(orgA);
-
-    // With no body, Express leaves req.body undefined, so Zod reports the
-    // issue on the whole body (path ''), not on 'email'.
-    const cases: Array<[string, request.Test, string]> = [
-      ['no body', addMember(alice.cookie, orgA), ''],
-      ['{}', addMember(alice.cookie, orgA).send({}), 'email'],
-      ['a number', addMember(alice.cookie, orgA).send({ email: 42 }), 'email'],
-      ['nope', addMember(alice.cookie, orgA).send({ email: 'nope' }), 'email'],
-      [
-        '255 characters',
-        addMember(alice.cookie, orgA).send({
-          email: 'a'.repeat(243) + '@example.com',
-        }),
-        'email',
-      ],
-    ];
-    for (const [label, req, path] of cases) {
-      const res = await req;
-      expect({ label, status: res.status, error: res.body.error }).toEqual({
-        label,
-        status: 400,
-        error: 'Bad Request',
-      });
-      expect({ label, path: res.body.details[0].path }).toEqual({
-        label,
-        path,
-      });
-    }
-
-    expect(await countMemberships(orgA)).toBe(before);
-  });
-
-  it('lets exactly one of two simultaneous adds of Carol win', async () => {
-    const [first, second] = await Promise.all([
-      addMember(alice.cookie, orgA).send({ email: carol.email }),
-      addMember(alice.cookie, orgA).send({ email: carol.email }),
-    ]);
-    expect([first.status, second.status].sort()).toEqual([201, 409]);
-
-    const rows = await client.query(
-      'SELECT 1 FROM memberships WHERE org_id = $1 AND user_id = $2',
-      [orgA, carol.id],
+describe('no adding by email', () => {
+  it('answers the owner POST /members with the unknown-route 404 and adds no row', async () => {
+    const unknownRoute = observed(
+      await request(app).get('/api/does-not-exist').set('Cookie', alice.cookie),
     );
-    expect(rows.rowCount).toBe(1);
-
-    // Back to a known state: Carol in no organization.
-    const remove = await removeMember(alice.cookie, orgA, carol.id);
-    expect(remove.status).toBe(204);
+    const before = await countMemberships(orgA);
+    const res = await request(app)
+      .post(`/api/orgs/${orgA}/members`)
+      .set('Origin', TRUSTED_ORIGIN)
+      .set('Cookie', alice.cookie)
+      .send({ email: carol.email });
+    expect(observed(res)).toEqual(unknownRoute);
+    expect(await countMemberships(orgA)).toBe(before);
     expect(await membershipRole(orgA, carol.id)).toBeUndefined();
   });
 });
@@ -284,13 +186,9 @@ describe('list', () => {
   });
 });
 
-describe('role check: staff cannot add or remove', () => {
-  it('returns 403 to Bob adding Carol, removing Alice and removing himself', async () => {
+describe('role check: staff cannot remove', () => {
+  it('returns 403 to Bob removing Alice and removing himself', async () => {
     const attempts: Array<[string, () => request.Test]> = [
-      [
-        'add Carol',
-        () => addMember(bob.cookie, orgA).send({ email: carol.email }),
-      ],
       ['remove Alice', () => removeMember(bob.cookie, orgA, alice.id)],
       ['remove himself', () => removeMember(bob.cookie, orgA, bob.id)],
     ];
@@ -359,7 +257,7 @@ describe('isolation: Dave (owner of B) on organization A', () => {
     );
   });
 
-  it('gets the unknown-route 404 on list, add and remove, and A is unchanged', async () => {
+  it('gets the unknown-route 404 on list and remove, and A is unchanged', async () => {
     const unknownRoute = observed(
       await request(app).get('/api/does-not-exist').set('Cookie', dave.cookie),
     );
@@ -369,10 +267,6 @@ describe('isolation: Dave (owner of B) on organization A', () => {
     const before = await countMemberships(orgA);
     const attempts: Array<[string, () => request.Test]> = [
       ['list', () => listMembers(dave.cookie, orgA)],
-      [
-        'add Carol',
-        () => addMember(dave.cookie, orgA).send({ email: carol.email }),
-      ],
       ['remove Bob', () => removeMember(dave.cookie, orgA, bob.id)],
     ];
     for (const [label, attempt] of attempts) {

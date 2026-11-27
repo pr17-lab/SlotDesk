@@ -1,6 +1,7 @@
 import { redirect, type RouteObject } from 'react-router';
 import { ErrorPage } from './pages/ErrorPage';
 import { Home, homeAction, homeLoader } from './pages/Home';
+import { Invite } from './pages/Invite';
 import { NotFound } from './pages/NotFound';
 import {
   PublicBooking,
@@ -70,6 +71,8 @@ export const routes: RouteObject[] = [
         loader: () => redirect('/'),
         action: signOutAction,
       },
+      // An invite link: keeps its secret and moves on to the home page.
+      { path: '/invite', Component: Invite },
       {
         path: '/orgs/:orgId',
         loader: organizationLoader,

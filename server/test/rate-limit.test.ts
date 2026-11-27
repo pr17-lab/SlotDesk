@@ -171,6 +171,20 @@ describe('the limits on /api/orgs in the real app', () => {
     expect((await request(app).get('/api/orgs')).status).toBe(429);
   });
 
+  // The invite routes share these counts: the same signed-in people use both.
+  it('limits /api/invitations on the same counts, before the origin check', async () => {
+    const app = await loadApp(2, 100);
+
+    expect((await request(app).post('/api/orgs')).status).toBe(403);
+    expect((await request(app).post('/api/invitations/accept')).status).toBe(
+      403,
+    );
+    const res = await request(app).post('/api/invitations/accept');
+
+    expect(res.status).toBe(429);
+    expect(res.body).toEqual({ error: 'Too Many Requests' });
+  });
+
   it('does not limit /api/health', async () => {
     const app = await loadApp(1, 1);
 
