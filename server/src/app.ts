@@ -14,6 +14,7 @@ import {
 } from './middleware/rate-limit.js';
 import { healthRouter } from './routes/health.js';
 import { invitationsRouter } from './routes/invitations.js';
+import { manageRouter } from './routes/manage.js';
 import { orgsRouter } from './routes/orgs.js';
 import { publicRouter } from './routes/public.js';
 
@@ -51,6 +52,10 @@ app.use(
   publicBookingLimiter,
   publicRouter,
 );
+// The customer's cancel link. Not under /api/public: a business could pick
+// "manage" as its link name, and looking or cancelling must not use up the
+// bookings-per-hour limit. Shares the public request count.
+app.use('/api/manage', publicRequestLimiter, manageRouter);
 
 // The built React app, if there is one. React Router handles page paths, so
 // any other GET gets index.html, except /api paths (D-019). Express ignores

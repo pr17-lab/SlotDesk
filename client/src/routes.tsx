@@ -2,6 +2,7 @@ import { redirect, type RouteObject } from 'react-router';
 import { ErrorPage } from './pages/ErrorPage';
 import { Home, homeAction, homeLoader } from './pages/Home';
 import { Invite } from './pages/Invite';
+import { Manage } from './pages/Manage';
 import { NotFound } from './pages/NotFound';
 import {
   PublicBooking,
@@ -98,4 +99,6 @@ export const routes: RouteObject[] = [
     ErrorBoundary: ErrorPage,
     HydrateFallback: Starting,
   },
+  // The customer's cancel link, outside 'root' for the same reason.
+  { path: '/manage', Component: Manage, ErrorBoundary: ErrorPage },
 ];

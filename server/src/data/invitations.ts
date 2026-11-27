@@ -1,5 +1,6 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { pool, withTransaction } from '../db.js';
+import { hashToken } from '../tokens.js';
 import { isDuplicateMembership } from './memberships.js';
 
 // At most this many live invitations per organization, so one owner can't
@@ -12,11 +13,6 @@ export type Invitation = {
   createdAt: Date;
   expiresAt: Date;
 };
-
-// We keep only the SHA-256 of a link's secret. Never log the secret.
-function hashToken(token: string): Buffer {
-  return createHash('sha256').update(token).digest();
-}
 
 export type CreateResult =
   | { status: 'created'; invitation: Invitation; token: string }

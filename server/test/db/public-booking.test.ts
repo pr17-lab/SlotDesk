@@ -33,6 +33,7 @@ import {
   TEST_TOKEN,
   verifyCalls,
 } from './helpers/turnstile-fake.js';
+import { newManageToken } from './helpers/booking-data.js';
 import { logger } from '../../src/logger.js';
 
 const TRUSTED_ORIGIN = 'http://localhost:3000';
@@ -137,12 +138,16 @@ const validBody = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-// Sends a bot check token unless the body sets its own.
+// Sends a bot check token and a cancel secret unless the body sets its own.
 const book = (slug: string, body: object, origin = TRUSTED_ORIGIN) =>
   request(app)
     .post(`/api/public/${slug}/bookings`)
     .set('Origin', origin)
-    .send({ turnstileToken: TEST_TOKEN, ...body });
+    .send({
+      turnstileToken: TEST_TOKEN,
+      manageToken: newManageToken(),
+      ...body,
+    });
 
 const freeTimes = (slug: string, resourceId: string, query: object) =>
   request(app)

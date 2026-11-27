@@ -1,5 +1,6 @@
 import { bookableSlot } from '../availability.js';
 import { pool, withTransaction } from '../db.js';
+import { hashToken } from '../tokens.js';
 import { SELECT_WORKING_HOURS, type WorkingWindow } from './working-hours.js';
 
 // pg returns timestamptz columns as JavaScript Date objects.
@@ -72,6 +73,11 @@ export type OnlineRules = { latestStart: Date; dailyCap: number };
 // the daily count exact: two online bookings for one room can't both count
 // 19 and both get in, because the second counts only after the first
 // commits.
+//
+// An online booking also stores the hash of its cancel link's secret. The
+// page makes the secret, so a repeat still has it; a repeat with another
+// secret counts as different details. A secret already in use breaks the
+// UNIQUE and becomes a 409.
 export async function createBooking(
   orgId: string,
   request: {
@@ -81,6 +87,7 @@ export async function createBooking(
     customerName: string;
     customerEmail: string;
     idempotencyKey?: string;
+    manageToken?: string;
   },
   now: Date,
   online?: OnlineRules,
@@ -97,16 +104,21 @@ export async function createBooking(
     }
 
     if (request.idempotencyKey !== undefined) {
-      const earlier = await client.query<Booking & { serviceName: string }>(
-        `SELECT ${BOOKING_COLUMNS},
+      const earlier = await client.query<
+        Booking & { serviceName: string; manageTokenHash: Buffer | null }
+      >(
+        `SELECT ${BOOKING_COLUMNS}, manage_token_hash AS "manageTokenHash",
            (SELECT name FROM services
             WHERE org_id = bookings.org_id AND id = bookings.service_id) AS "serviceName"
          FROM bookings WHERE org_id = $1 AND idempotency_key = $2`,
         [orgId, request.idempotencyKey],
       );
       if (earlier.rowCount !== 0) {
-        const { serviceName, ...booking } = earlier.rows[0];
-        if (!sameRequest(booking, request, online === undefined)) {
+        const { serviceName, manageTokenHash, ...booking } = earlier.rows[0];
+        if (
+          !sameRequest(booking, request, online === undefined) ||
+          !sameSecret(manageTokenHash, request.manageToken)
+        ) {
           return { status: 'keyReused' };
         }
         return {
@@ -168,8 +180,8 @@ export async function createBooking(
     // start plus the service's duration.
     const inserted = await client.query<Booking>(
       `INSERT INTO bookings
-         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email, source, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (org_id, resource_id, service_id, starts_at, ends_at, customer_name, customer_email, source, idempotency_key, manage_token_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${BOOKING_COLUMNS}`,
       [
         orgId,
@@ -181,6 +193,9 @@ export async function createBooking(
         request.customerEmail,
         online === undefined ? 'staff' : 'public',
         request.idempotencyKey ?? null,
+        request.manageToken === undefined
+          ? null
+          : hashToken(request.manageToken),
       ],
     );
     return {
@@ -214,6 +229,15 @@ function sameRequest(
     booking.customerEmail === request.customerEmail &&
     booking.source === (byStaff ? 'staff' : 'public')
   );
+}
+
+// True if a repeat brings the cancel secret the booking was stored with, or
+// neither has one.
+function sameSecret(stored: Buffer | null, token: string | undefined) {
+  if (stored === null || token === undefined) {
+    return stored === null && token === undefined;
+  }
+  return stored.equals(hashToken(token));
 }
 
 // The confirmed bookings that overlap [start, end), for the availability
@@ -286,4 +310,81 @@ export async function cancelBooking(
     [orgId, bookingId],
   );
   return result.rows[0] ?? null;
+}
+
+// ---- The customer's cancel link ----
+
+// Online cancelling closes this long before the start. Staff can cancel any
+// time.
+export const CANCEL_NOTICE_HOURS = 24;
+
+// What the cancel link shows: when and what, never who, and no IDs.
+export type ManagedBooking = {
+  businessName: string;
+  serviceName: string;
+  resourceName: string;
+  startsAt: Date;
+  endsAt: Date;
+  timeZone: string;
+  status: 'confirmed' | 'cancelled';
+  cancelBefore: Date;
+};
+
+// Shared by lookup and cancel. `b` is the bookings table or the rows the
+// cancel just changed. $2 is CANCEL_NOTICE_HOURS.
+const MANAGED_COLUMNS = `o.name AS "businessName", s.name AS "serviceName",
+  r.name AS "resourceName", b.starts_at AS "startsAt", b.ends_at AS "endsAt",
+  r.time_zone AS "timeZone", b.status,
+  b.starts_at - make_interval(hours => $2) AS "cancelBefore"`;
+const MANAGED_JOINS = `JOIN organizations o ON o.id = b.org_id
+  JOIN resources r ON r.org_id = b.org_id AND r.id = b.resource_id
+  JOIN services s ON s.org_id = b.org_id AND s.id = b.service_id`;
+
+// The booking behind a cancel link, until it starts; null after that or for
+// an unknown secret. A staff booking has no hash, so no secret finds one.
+export async function findByManageToken(
+  token: string,
+): Promise<ManagedBooking | null> {
+  const result = await pool.query<ManagedBooking>(
+    `SELECT ${MANAGED_COLUMNS} FROM bookings b ${MANAGED_JOINS}
+     WHERE b.manage_token_hash = $1 AND b.starts_at > now()`,
+    [hashToken(token), CANCEL_NOTICE_HOURS],
+  );
+  return result.rows[0] ?? null;
+}
+
+export type ManageCancelResult =
+  | { status: 'cancelled'; booking: ManagedBooking }
+  | { status: 'tooLate' }
+  | { status: 'notFound' };
+
+// Cancels the booking behind a cancel link, while more than
+// CANCEL_NOTICE_HOURS are left. The database's clock decides, like every
+// other time rule here.
+//
+// The cancel is one UPDATE, so PostgreSQL locks the row: two cancels, or a
+// customer's and a staff one, run one after the other and both succeed.
+// Only when it changes nothing do we read the booking to pick the answer.
+// The read never writes and a start never changes, so the only thing that
+// can happen in between is a staff cancel, and then "cancelled" is true.
+export async function cancelByManageToken(
+  token: string,
+): Promise<ManageCancelResult> {
+  const result = await pool.query<ManagedBooking>(
+    `WITH b AS (
+       UPDATE bookings SET status = 'cancelled'
+       WHERE manage_token_hash = $1
+         AND starts_at > now() + make_interval(hours => $2)
+       RETURNING org_id, resource_id, service_id, starts_at, ends_at, status
+     )
+     SELECT ${MANAGED_COLUMNS} FROM b ${MANAGED_JOINS}`,
+    [hashToken(token), CANCEL_NOTICE_HOURS],
+  );
+  if (result.rows[0] !== undefined) {
+    return { status: 'cancelled', booking: result.rows[0] };
+  }
+  const booking = await findByManageToken(token);
+  if (booking === null) return { status: 'notFound' };
+  if (booking.status === 'cancelled') return { status: 'cancelled', booking };
+  return { status: 'tooLate' };
 }

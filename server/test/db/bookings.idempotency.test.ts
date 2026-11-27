@@ -5,7 +5,7 @@
 // request sent at the same moment.
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -139,12 +139,21 @@ const asStaff = (
   return req.send(body);
 };
 
+// The cancel secret comes from the key, so a repeat sends the same one, as
+// the page does.
+const secretFor = (key: string) =>
+  createHash('sha256').update(key).digest('base64url');
+
 const online = (body: object, key?: string, slug = 'retry-clinic') => {
   const req = request(app)
     .post(`/api/public/${slug}/bookings`)
     .set('Origin', TRUSTED_ORIGIN);
   if (key !== undefined) req.set('Idempotency-Key', key);
-  return req.send({ turnstileToken: TEST_TOKEN, ...body });
+  return req.send({
+    turnstileToken: TEST_TOKEN,
+    manageToken: secretFor(key ?? randomUUID()),
+    ...body,
+  });
 };
 
 const countBookings = async (): Promise<number> => {
@@ -558,14 +567,16 @@ describe('copies of one request at the same moment', () => {
 
   it('online: 2 copies both get the same answer, over 10 rounds', async () => {
     for (let round = 0; round < 10; round++) {
+      const key = randomUUID();
       const answers = await fireCopies(
         2,
         '/api/public/retry-clinic/bookings',
         {
           ...validBody({ startsAt: at(3, round) }),
           turnstileToken: TEST_TOKEN,
+          manageToken: secretFor(key),
         },
-        { 'idempotency-key': quoted(randomUUID()) },
+        { 'idempotency-key': quoted(key) },
       );
       expect(answers.map((a) => a.status)).toEqual([201, 201]);
       expect(answers[1]!.body).toEqual(answers[0]!.body);

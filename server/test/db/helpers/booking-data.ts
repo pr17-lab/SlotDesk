@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 
 // Test-data helpers shared by the booking test files.
@@ -49,3 +50,6 @@ export function slotFor(
   const endsAt = new Date(startsAt.getTime() + 60 * 60 * 1000);
   return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
 }
+
+// A cancel link's secret, in the format the public page sends with a booking.
+export const newManageToken = () => randomBytes(32).toString('base64url');

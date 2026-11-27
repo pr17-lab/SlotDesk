@@ -46,6 +46,19 @@ export type Invitation = {
   token: string;
 };
 
+// An online booking as the cancel link shows it, with the link's secret.
+export type Managed = {
+  token: string;
+  businessName: string;
+  serviceName: string;
+  resourceName: string;
+  startsAt: string;
+  endsAt: string;
+  timeZone: string;
+  status: 'confirmed' | 'cancelled';
+  cancelBefore: string;
+};
+
 type Data = {
   orgs: Org[];
   resources: Resource[];
@@ -55,6 +68,7 @@ type Data = {
   slots: Slot[];
   members: Member[];
   invitations: Invitation[];
+  managed: Managed[];
   // What the public page gets for the bot check; null means it is off.
   turnstileSiteKey: string | null;
 };
@@ -73,6 +87,7 @@ export function fakeApi(given: Partial<Data> = {}) {
     slots: given.slots ?? [],
     members: given.members ?? [],
     invitations: given.invitations ?? [],
+    managed: given.managed ?? [],
     turnstileSiteKey:
       given.turnstileSiteKey === undefined
         ? 'test-site-key'
@@ -166,6 +181,24 @@ export function fakeApi(given: Partial<Data> = {}) {
         resourceName: resource.name,
         timeZone: resource.timeZone,
       });
+    }
+
+    // Like the server: the 404 once the booking has started, and the 409
+    // inside the last 24 hours.
+    const manageMatch = /^\/api\/manage\/(lookup|cancel)$/.exec(route);
+    if (manageMatch) {
+      const found = data.managed.find((m) => m.token === body?.token);
+      if (!found || Date.now() >= Date.parse(found.startsAt)) {
+        return reply(404, { error: 'Not found' });
+      }
+      if (manageMatch[1] === 'cancel' && found.status === 'confirmed') {
+        if (Date.now() >= Date.parse(found.cancelBefore)) {
+          return reply(409, { error: 'Too late to cancel online' });
+        }
+        found.status = 'cancelled';
+      }
+      // The secret never comes back; JSON leaves out undefined.
+      return reply(200, { ...found, token: undefined });
     }
 
     const inviteMatch = /^\/api\/invitations\/(lookup|accept|decline)$/.exec(
