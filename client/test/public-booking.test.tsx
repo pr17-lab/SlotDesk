@@ -80,6 +80,9 @@ async function fillIn() {
 const posts = (api: ReturnType<typeof fakeApi>) =>
   api.callsTo('POST', '/api/public/sunrise-physio/bookings');
 
+// A cancel link's secret: 32 random bytes in base64url, no padding.
+const secretPattern = /^[A-Za-z0-9_-]{43}$/;
+
 // 7:30 AM on Monday 5 January 2099 in India.
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -200,14 +203,19 @@ it('books a time and shows what was booked', async () => {
     customerName: 'Meera',
     customerEmail: 'meera@example.com',
     turnstileToken: 'token-1',
+    manageToken: expect.stringMatching(secretPattern),
   });
   expect(card.getByText('Sunrise Physio')).toBeTruthy();
   expect(card.getByText('Consultation')).toBeTruthy();
   expect(card.getByText('Mon 5 Jan, 9:00 AM IST')).toBeTruthy();
   expect(card.getByText('Meera')).toBeTruthy();
+  // 9:00 is less than 24 hours away, so there is no cancel link.
   expect(
-    card.getByText('To change or cancel, contact the business.'),
+    card.getByText(
+      "This booking starts within 24 hours, so it can't be cancelled online. Contact the business to cancel.",
+    ),
   ).toBeTruthy();
+  expect(card.queryByLabelText('Your cancel link')).toBeNull();
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
   await userEvent.click(
@@ -221,6 +229,45 @@ it('books a time and shows what was booked', async () => {
   expect(
     screen.queryByRole('button', { name: 'Book 9:00 AM on Monday 5 January' }),
   ).toBeNull();
+});
+
+it('shows a cancel link for a booking more than 24 hours away', async () => {
+  const check = fakeTurnstile();
+  const api = open();
+
+  await userEvent.click(
+    await screen.findByRole('button', {
+      name: 'Book 10:00 AM on Tuesday 6 January',
+    }),
+  );
+  await screen.findByRole('dialog');
+  await fillIn();
+  check.pass('token-1');
+  const user = userEvent.setup();
+  await user.click(dialog().getByRole('button', { name: 'Book' }));
+
+  const card = within(
+    await screen.findByRole('region', { name: "You're booked" }),
+  );
+  const secret = (posts(api)[0].body as { manageToken: string }).manageToken;
+  expect(secret).toMatch(secretPattern);
+  const field = card.getByLabelText('Your cancel link') as HTMLInputElement;
+  const link = `${window.location.origin}/manage#${secret}`;
+  expect(field.value).toBe(link);
+  expect(field.readOnly).toBe(true);
+  // 24 hours before 10:00 AM on Tuesday.
+  expect(
+    card.getByText(
+      'Save this link. You can cancel online until Mon 5 Jan, 10:00 AM IST. Anyone with it can cancel this booking.',
+    ),
+  ).toBeTruthy();
+  expect(
+    card.getByText('To change a booking, contact the business.'),
+  ).toBeTruthy();
+
+  await user.click(card.getByRole('button', { name: 'Copy link' }));
+  expect(await navigator.clipboard.readText()).toBe(link);
+  expect(await card.findByText('Copied')).toBeTruthy();
 });
 
 it('asks for the check before sending anything', async () => {
@@ -411,6 +458,14 @@ it('sends the same key on every try in a dialog, and a new key in a new dialog',
   expect(key2).toBe(key1);
   expect(key3).toMatch(quotedUuid);
   expect(key3).not.toBe(key1);
+  // The cancel secret goes with the key, so a retry still shows a working link.
+  const [secret1, secret2, secret3] = posts(api).map(
+    (call) => (call.body as { manageToken: string }).manageToken,
+  );
+  expect(secret1).toMatch(secretPattern);
+  expect(secret2).toBe(secret1);
+  expect(secret3).toMatch(secretPattern);
+  expect(secret3).not.toBe(secret1);
 });
 
 it('says the booking already went through for a 422', async () => {

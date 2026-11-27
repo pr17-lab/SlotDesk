@@ -257,6 +257,33 @@ describe('the limits on /api/public in the real app', () => {
     expect((await bookFrom(app, '1.1.1.1')).status).toBe(429);
   });
 
+  // No Origin header, so a request that gets past the limiter is refused
+  // with 403 by the origin check, before any database query.
+  const manageFrom = (app: express.Express, address: string) =>
+    request(app).post('/api/manage/lookup').set('cf-connecting-ip', address);
+
+  it('shares one request count with the cancel link routes', async () => {
+    const app = await loadApp({ PUBLIC_REQUEST_RATE_LIMIT: '2' });
+
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(404);
+    expect((await manageFrom(app, '1.1.1.1')).status).toBe(403);
+
+    expect((await manageFrom(app, '1.1.1.1')).status).toBe(429);
+    expect((await readFrom(app, '1.1.1.1')).status).toBe(429);
+    expect((await manageFrom(app, '2.2.2.2')).status).toBe(403);
+  });
+
+  it('does not count the cancel link routes against the booking limit', async () => {
+    const app = await loadApp({ PUBLIC_BOOKING_RATE_LIMIT: '1' });
+
+    for (let i = 0; i < 3; i++) {
+      expect((await manageFrom(app, '1.1.1.1')).status).toBe(403);
+    }
+
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(403);
+    expect((await bookFrom(app, '1.1.1.1')).status).toBe(429);
+  });
+
   it('keeps its counts apart from the /api/orgs counts', async () => {
     const app = await loadApp({
       PUBLIC_REQUEST_RATE_LIMIT: '1',

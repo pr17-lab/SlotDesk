@@ -9,6 +9,7 @@ import { listServices } from '../data/services.js';
 import { isValidId } from '../ids.js';
 import { notFoundHandler, sendValidationError } from '../middleware/errors.js';
 import { requireTrustedOrigin } from '../middleware/origin.js';
+import { tokenSchema } from '../tokens.js';
 import { verifyTurnstile } from '../turnstile.js';
 import { availabilityQuerySchema, findFreeTimes } from './availability.js';
 import {
@@ -41,10 +42,11 @@ export const bookingSlugSchema = z
       'Use 3 to 40 letters, digits or hyphens, starting and ending with a letter or digit',
   });
 
-// The staff booking fields plus the bot check's token. Cloudflare's tokens
-// are at most 2048 characters.
+// The staff booking fields plus the bot check's token (Cloudflare's are at
+// most 2048 characters) and the cancel link's secret, which the page makes.
 const publicBookingSchema = createBookingSchema.extend({
   turnstileToken: z.string().min(1).max(2048),
+  manageToken: tokenSchema,
 });
 
 declare global {
@@ -145,8 +147,8 @@ businessRouter.get(
 );
 
 // Books through the same createBooking as staff, with the online rules on.
-// The answer is what the confirmation shows: no booking ID and no customer
-// details.
+// The answer is what the confirmation shows: no booking ID, no customer
+// details, and never the cancel secret, which the page already has.
 //
 // The bot check runs here, before createBooking and outside its
 // transaction. Never move it inside: createBooking locks the room's row, so

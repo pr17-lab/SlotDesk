@@ -213,6 +213,27 @@ export function SecondaryButton({
   );
 }
 
+// Copies a link, with the link also shown in a field beside it, so it can
+// still be copied by hand if the browser refuses.
+export function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <SecondaryButton
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+        } catch {
+          // The field can still be copied by hand.
+        }
+      }}
+    >
+      {copied ? 'Copied' : 'Copy link'}
+    </SecondaryButton>
+  );
+}
+
 export function SecondaryLink({
   className,
   small = false,

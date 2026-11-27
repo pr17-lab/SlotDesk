@@ -21,7 +21,7 @@ test('staff can sign up, add sample data and book a slot', async ({ page }) => {
 });
 
 // Uses Cloudflare's test keys (set in CI), so the real widget always passes.
-test('a customer can book online and staff see it', async ({
+test('a customer can book online, cancel with the link, and staff see it', async ({
   page,
   browser,
 }) => {
@@ -39,6 +39,9 @@ test('a customer can book online and staff see it', async ({
   await expect(
     shop.getByRole('heading', { name: 'Smoke Clinic' }),
   ).toBeVisible();
+  // A week ahead, so the booking is more than 24 hours away and gets a
+  // cancel link.
+  await shop.getByRole('link', { name: 'Next 7 days' }).click();
   await shop
     .getByRole('button', { name: /^Book \d/ })
     .first()
@@ -57,13 +60,27 @@ test('a customer can book online and staff see it', async ({
       .click({ timeout: 1000 });
     await expect(booked).toBeVisible({ timeout: 2000 });
   }).toPass({ timeout: 15_000 });
+
+  // The link works in a real browser: the secret after # reaches the page.
+  const cancelLink = await shop.getByLabel('Your cancel link').inputValue();
+  const manage = await customer.newPage();
+  await manage.goto(cancelLink);
+  await manage.getByRole('button', { name: 'Cancel booking' }).click();
+  await manage
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Cancel booking' })
+    .click();
+  await expect(
+    manage.getByText('Booking cancelled. The time is free again.'),
+  ).toBeVisible();
   await customer.close();
 
-  // Staff see the booking, marked as made online.
+  // Staff see the booking, made online and now cancelled.
   await page.reload();
+  await page.getByRole('link', { name: 'Next 7 days' }).click();
   const row = page.getByRole('listitem').filter({ hasText: 'pat@example.com' });
   await expect(row.getByText('Online', { exact: true })).toBeVisible();
-  await expect(row.getByText('Confirmed', { exact: true })).toBeVisible();
+  await expect(row.getByText('Cancelled', { exact: true })).toBeVisible();
 });
 
 // The page has no dark theme, so a device in dark mode must see the same

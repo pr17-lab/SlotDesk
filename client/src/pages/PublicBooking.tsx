@@ -27,6 +27,7 @@ import {
 import { loadTurnstile } from '../turnstile';
 import {
   Card,
+  CopyButton,
   FormMessage,
   Modal,
   SecondaryButton,
@@ -34,6 +35,7 @@ import {
   TextField,
   focusStyle,
 } from '../ui';
+import { CANCEL_NOTICE_HOURS, cancelLink, newSecret } from '../cancel-link';
 
 // The customer's booking page: no account and no session. The business comes
 // from the link the owner chose.
@@ -155,6 +157,7 @@ export async function publicBookingAction({
   if (!turnstileToken) return { error: 'Please complete the check first' };
 
   const customerName = String(form.get('customerName'));
+  const manageToken = String(form.get('manageToken'));
   try {
     const booked = await api<Booked>(`${pageApi(slug)}/bookings`, {
       method: 'POST',
@@ -165,10 +168,11 @@ export async function publicBookingAction({
         customerName,
         customerEmail: String(form.get('customerEmail')),
         turnstileToken,
+        manageToken,
       },
       headers: { 'Idempotency-Key': `"${String(form.get('idempotencyKey'))}"` },
     });
-    return { booked: { ...booked, customerName } };
+    return { booked: { ...booked, customerName, manageToken } };
   } catch (error) {
     return { error: bookingError(error) };
   }
@@ -245,8 +249,10 @@ function BookDialog({
 }) {
   const [token, setToken] = useState('');
   // One key for every try in this dialog, so a retry after a lost answer
-  // gets the same booking back instead of a 409.
+  // gets the same booking back instead of a 409. The cancel secret goes with
+  // it: the server keeps only its hash, so a retry can't get it back.
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [manageToken] = useState(newSecret);
   // A new React key draws a new widget.
   const [check, setCheck] = useState(0);
   const booking = fetcher.state !== 'idle';
@@ -275,6 +281,7 @@ function BookDialog({
       </p>
       <form onSubmit={send} className="mt-4 space-y-4">
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+        <input type="hidden" name="manageToken" value={manageToken} />
         <input type="hidden" name="resourceId" value={resource.id} />
         <input type="hidden" name="serviceId" value={service.id} />
         <input type="hidden" name="startsAt" value={slot.startsAt} />
@@ -316,7 +323,7 @@ function YouAreBooked({
   onAgain,
 }: {
   business: string;
-  booked: Booked & { customerName: string };
+  booked: Booked & { customerName: string; manageToken: string };
   showWith: boolean;
   onAgain: () => void;
 }) {
@@ -324,14 +331,19 @@ function YouAreBooked({
   // The dialog has just gone, so the focus moves to what it did.
   useEffect(() => box.current?.focus(), []);
   const { startsAt, timeZone } = booked;
+  const when = (instant: string) =>
+    `${dayLabel(localDate(instant, timeZone))}, ${localTime(instant, timeZone)} ${zoneAbbreviation(instant, timeZone)}`;
+  // The server decides; this only chooses what to show.
+  const [bookedAt] = useState(Date.now);
+  const cancelBefore = new Date(
+    Date.parse(startsAt) - CANCEL_NOTICE_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+  const link = cancelLink(booked.manageToken);
   const rows = [
     ['Business', business],
     ['Service', booked.serviceName],
     ...(showWith ? [['With', booked.resourceName]] : []),
-    [
-      'When',
-      `${dayLabel(localDate(startsAt, timeZone))}, ${localTime(startsAt, timeZone)} ${zoneAbbreviation(startsAt, timeZone)}`,
-    ],
+    ['When', when(startsAt)],
     ['Name', booked.customerName],
   ];
 
@@ -350,7 +362,26 @@ function YouAreBooked({
             </div>
           ))}
         </dl>
-        <p className="mt-4">To change or cancel, contact the business.</p>
+        {bookedAt < Date.parse(cancelBefore) ? (
+          <div className="mt-4 space-y-3">
+            <TextField
+              label="Your cancel link"
+              value={link}
+              readOnly
+              onFocus={(event) => event.target.select()}
+            />
+            <p className="text-muted-foreground text-sm">
+              {`Save this link. You can cancel online until ${when(cancelBefore)}. Anyone with it can cancel this booking.`}
+            </p>
+            <CopyButton text={link} />
+            <p>To change a booking, contact the business.</p>
+          </div>
+        ) : (
+          <p className="mt-4">
+            This booking starts within 24 hours, so it can&apos;t be cancelled
+            online. Contact the business to cancel.
+          </p>
+        )}
         <SecondaryButton type="button" className="mt-4" onClick={onAgain}>
           Book another time
         </SecondaryButton>

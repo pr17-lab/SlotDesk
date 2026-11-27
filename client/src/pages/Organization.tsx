@@ -26,6 +26,7 @@ import {
   Badge,
   Breadcrumb,
   Card,
+  CopyButton,
   FormMessage,
   ListRow,
   Modal,
@@ -331,25 +332,6 @@ const expiry = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <SecondaryButton
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-        } catch {
-          // The field can still be copied by hand.
-        }
-      }}
-    >
-      {copied ? 'Copied' : 'Copy link'}
-    </SecondaryButton>
-  );
-}
 
 function PendingInvite({ invitation }: { invitation: Invitation }) {
   const fetcher = useFetcher<typeof organizationAction>();
